@@ -59,3 +59,33 @@ def preprocessData(en_seq, fr_seq_in, fr_seq_out, fr_test, en_test):
   preprocessed_fr_seq_out = preprocess(fr_seq_out, fr_tokenizer)
 
   return preprocessed_en_seq, preprocessed_fr_seq_in, preprocessed_fr_seq_out, en_tokenizer, fr_tokenizer 
+
+# predicting random sentence output
+def predict_output():
+  index = np.random.choice(len(en_test))
+  en_sentence = en_test[index]
+  should_be_sentence = fr_test[index]
+
+  sentence = en_tokenizer.texts_to_sequences([en_sentence])
+  initial_states = encoder.init_states(1)
+  _, state_h, state_c = encoder(tf.constant(sentence), initial_states, training=False)
+
+  symbol = tf.constant([[fr_tokenizer.word_index['<start>']]])
+  sentence = []
+
+  while True:
+    symbol, state_h, state_c = decoder(symbol, (state_h, state_c), training=False)
+    # argmax to get max index 
+    symbol = tf.argmax(symbol, axis=-1)
+    word = fr_tokenizer.index_word[symbol.numpy()[0][0]]
+
+    if len(sentence) >=23 or word == '<end>':
+      break
+
+    sentence.append(word + " ")
+  
+  predicted_sentence = ''.join(sentence)
+  print("--------------PREDICTION--------------")
+  print("Predicted sentence:  {} " .format(predicted_sentence))
+  print("Should be sentence:  {} " .format(should_be_sentence))
+  print("------------END PREDICTION------------")
