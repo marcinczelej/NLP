@@ -51,7 +51,7 @@ if __name__ == "__main__":
     parser.add_argument('-em', '--embedding_size', type=int, default=256, help="set value of EMBEDDING_SIZE. Default=256")
     parser.add_argument('-u', '--lstm_units', type=int, default=512, help="set value of LSTM_UNITS. Default=512")
     parser.add_argument('-t', '--training',type=int,  default=1, help="set implementation to use : 1. single GPU/CPU training   2.distributed training    Default=1")
-    parser.add_argument('-i', '--implementation', type=str,  default="general", help="set  attention score type to use: 1.dot   2.general   3.additive   4.scaled Dot-Product    Default=general")
+    parser.add_argument('-i', '--implementation', type=str,  default="concat", help="set  attention score type to use: 1.dot   2.general   3.concat    Default=concat")
     parser.add_argument('-e', '--epochs', type=int, default=60, help="set EPOCHS number. Default=60")
     parser.add_argument('-d', '--dir', type=str, default="data/fra-eng", help="set directory with input data. Default=data/fra-eng")
     parser.add_argument('-f', '--file', type=str, default="fra.txt", help="set name of data file. Default=fra.txt")

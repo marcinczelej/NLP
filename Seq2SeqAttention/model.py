@@ -13,6 +13,8 @@ class LuangAttention(tf.keras.Model):
     super(LuangAttention, self).__init__()
 
     self.W_a = tf.keras.layers.Dense(lstm_size, name="LuangAttention_W_a")
+    self.W_a_tanh = tf.keras.layers.Dense(lstm_size, activation="tanh", name="LuangAttention_W_a_tanh")
+    self.v_a = tf.keras.layers.Dense(1)
     self.type = attention_type
   
   def call(self, decoder_output, encoder_output):
@@ -20,11 +22,15 @@ class LuangAttention(tf.keras.Model):
     # decoder_output shape [batch_size, 1, hidden_units of decoder]
     # score shape [batch_size, 1, seq_max_len]
     if self.type == "dot":
-        score = 0
+        score = tf.matmul(decoder_output, encoder_output, transpose_b=True)
     elif self.type == "general":
         score = tf.matmul(decoder_output, self.W_a(encoder_output), transpose_b=True)
+    elif self.type == "concat":
+        decoder_output = tf.broadcast_to(decoder_output, encoder_output.shape)
+        concated = self.W_a_tanh(tf.concat((decoder_output, encoder_output), axis=-1))
+        score = tf.transpose(self.v_a(concated), [0,2,1])
     else:
-        raise Exception("not implemented yet")
+        raise Exception("wrong score function selected")
         
     alignment_vector = tf.nn.softmax(score, axis=2)
     context_vector = tf.matmul(alignment_vector, encoder_output)
