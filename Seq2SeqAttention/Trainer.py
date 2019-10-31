@@ -3,7 +3,7 @@ import tensorflow as tf
 from params import *
 from model import *
 
-def train(en_data, fr_data, fr_test, vocab_data, fr_tokenizer):
+def train(en_data, fr_data, fr_test, vocab_data, fr_tokenizer, attention_type):
     fr_train_in, fr_train_out, fr_test_tokenized = fr_data
     en_train, en_test = en_data
     en_vocab_size, fr_vocab_size = vocab_data
@@ -32,7 +32,7 @@ def train(en_data, fr_data, fr_test, vocab_data, fr_tokenizer):
     optim = tf.keras.optimizers.Adam(clipnorm=5.0)
 
     encoder = Encoder(LSTM_SIZE, EMBEDDING_SIZE, en_vocab_size)
-    decoder = Decoder(LSTM_SIZE, EMBEDDING_SIZE, fr_vocab_size)
+    decoder = Decoder(LSTM_SIZE, EMBEDDING_SIZE, fr_vocab_size, attention_type)
     
     @tf.function
     def test_step(en_seq, fr_seq_tokenized):
@@ -94,9 +94,9 @@ def train(en_data, fr_data, fr_test, vocab_data, fr_tokenizer):
             encoder.save_weights('./saved_weights/Best_model_weights_encoder', save_format='tf')
             decoder.save_weights('./saved_weights/Best_model_weights_decoder', save_format='tf')
             min_test_loss = test_losses[-1]
-
+    return train_losses, test_losses
             
-def distributedTrain(en_data, fr_data, fr_test, vocab_data, fr_tokenizer):
+def distributedTrain(en_data, fr_data, fr_test, vocab_data, fr_tokenizer, attention_type):
     fr_train_in, fr_train_out, fr_test_tokenized = fr_data
     en_train, en_test = en_data
     en_vocab_size, fr_vocab_size = vocab_data
@@ -127,7 +127,7 @@ def distributedTrain(en_data, fr_data, fr_test, vocab_data, fr_tokenizer):
 
     with strategy.scope():
         encoder = Encoder(LSTM_SIZE, EMBEDDING_SIZE, en_vocab_size)
-        decoder = Decoder(LSTM_SIZE, EMBEDDING_SIZE, fr_vocab_size)
+        decoder = Decoder(LSTM_SIZE, EMBEDDING_SIZE, fr_vocab_size, attention_type)
         optim = tf.keras.optimizers.Adam(clipnorm=0.5)
 
         encoder.save_weights('./saved_weights/starting_model_encoder', save_format='tf')
@@ -212,3 +212,4 @@ def distributedTrain(en_data, fr_data, fr_test, vocab_data, fr_tokenizer):
                 encoder.save_weights('./saved_weights/Best_model_weights_encoder', save_format='tf')
                 decoder.save_weights('./saved_weights/Best_model_weights_decoder', save_format='tf')
                 min_test_loss = test_loss/test_steps
+        return train_losses, test_losses

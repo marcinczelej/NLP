@@ -20,6 +20,7 @@ def normalize(s):
 
 def read_data(data_dir, file_name):
     full_path = os.path.join(data_dir, file_name)
+    print("reading data from ", full_path)
 
     with open(full_path) as file:
       lines = file.readlines()

@@ -3,23 +3,29 @@ import tensorflow as tf
 """
 class that implements LuangAttention
   - uses current decoder output as input to calculate alligment vector
-  - Bahdau uses last timestep decoder output to calculate alligment vector
   - score = h_t_trans*W_a*h_s
   - h_t - decoder hideden_state
   - h_s - encoder_output
   - context_vector = softmax(score)
 """
 class LuangAttention(tf.keras.Model):
-  def __init__(self, lstm_size):
+  def __init__(self, lstm_size, attention_type):
     super(LuangAttention, self).__init__()
 
     self.W_a = tf.keras.layers.Dense(lstm_size, name="LuangAttention_W_a")
+    self.type = attention_type
   
   def call(self, decoder_output, encoder_output):
     # encoder_output shape [batch_size, seq_max_len, hidden_units_of_encoder]
     # decoder_output shape [batch_size, 1, hidden_units of decoder]
     # score shape [batch_size, 1, seq_max_len]
-    score = tf.matmul(decoder_output, self.W_a(encoder_output), transpose_b=True)
+    if self.type == "dot":
+        score = 0
+    elif self.type == "general":
+        score = tf.matmul(decoder_output, self.W_a(encoder_output), transpose_b=True)
+    else:
+        raise Exception("not implemented yet")
+        
     alignment_vector = tf.nn.softmax(score, axis=2)
     context_vector = tf.matmul(alignment_vector, encoder_output)
 
@@ -50,14 +56,14 @@ class Encoder(tf.keras.Model):
             tf.zeros([batch_size, self.units]))
 
 class Decoder(tf.keras.Model):
-  def __init__(self, lstm_units, embedding_size, vocab_size):
+  def __init__(self, lstm_units, embedding_size, vocab_size, attention_type):
     super(Decoder, self).__init__()
 
     self.units = lstm_units
     self.embedding_layer = tf.keras.layers.Embedding(vocab_size, embedding_size, name="Decoder_embedding")
     self.lstm_layer = tf.keras.layers.LSTM(lstm_units, dropout=0.2, return_sequences=True, return_state=True, name="Decoder_lstm")
     self.dense_layer = tf.keras.layers.Dense(vocab_size)
-    self.attention = LuangAttention(lstm_units)
+    self.attention = LuangAttention(lstm_units, attention_type)
 
     self.W_c = tf.keras.layers.Dense(lstm_units, activation="tanh", name="Attention_W_c")
     self.W_s = tf.keras.layers.Dense(vocab_size, activation="softmax", name="Attenton_W_s")
