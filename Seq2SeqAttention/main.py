@@ -1,5 +1,6 @@
 import os
 import argparse
+import matplotlib.pyplot as plt
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
 
@@ -44,6 +45,16 @@ def main(args):
                 .format(EPOCHS, BATCH_SIZE, LSTM_SIZE, EMBEDDING_SIZE, args.implementation))
         train_losses, test_lossses = distributedTrain( \
             en_data, fr_data, fr_test, (en_vocab_size, fr_vocab_size), fr_tokenizer, args.implementation)
+
+    fig = plt.figure()
+    fig_plot = fig.add_subplot()
+    fig_plot.plot(train_losses, label="train_loss")
+    fig_plot.plot(test_losses, label="test_loss")
+    fig_plot.legend(location="lower left")
+    fig_plot.set_xlabel("epoch")
+    fig_plot.set_ylabel("loss")
+    fig_plot.grid(linestyle="--")
+    fig.savefig("losses_plot.png")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
