@@ -241,7 +241,7 @@ def distributedTrain(en_data, fr_data, en_test, fr_test, vocab_data, fr_tokenize
                 decoder_output, state_h, state_c = decoder(
                     decoder_input, (state_h, state_c), encoder_output, training=False)
                 decoder_input =tf.expand_dims(tf.argmax(decoder_output, 1),1)
-                loss +=compute_loss(decoder_out, fr_data_tokenized[:,i])
+                loss +=compute_loss(decoder_output, fr_data_tokenized[:,i])
             return loss/fr_data_tokenized.shape[1]
 
         @tf.function
