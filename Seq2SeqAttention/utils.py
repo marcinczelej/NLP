@@ -26,11 +26,30 @@ def read_data(data_dir, file_name):
       lines = file.readlines()
     
     data = []
-    
+
     for line in lines:
         data.append(line.split("\t")[:-1])
     
+    print(len(data))
     return data
+
+def read_data_files(data_dir, file_names):
+    
+    en_file_name, fr_file_name = file_names
+    
+    full_path = os.path.join(data_dir, en_file_name)
+    print("reading data from ", full_path)
+
+    with open(full_path) as file:
+      en_lines = file.readlines()
+    
+    full_path = os.path.join(data_dir, fr_file_name)
+    print("reading data from ", full_path)
+
+    with open(full_path) as file:
+      fr_lines = file.readlines()    
+    
+    return en_lines, fr_lines
 
 def preprocessSeq(texts, tokenizer):
   texts = tokenizer.texts_to_sequences(texts)

@@ -72,7 +72,7 @@ class Decoder(tf.keras.Model):
     self.attention = LuangAttention(lstm_units, attention_type)
 
     self.W_c = tf.keras.layers.Dense(lstm_units, activation="tanh", name="Attention_W_c")
-    self.W_s = tf.keras.layers.Dense(vocab_size, activation="softmax", name="Attenton_W_s")
+    self.W_s = tf.keras.layers.Dense(vocab_size, name="Attenton_W_s")
 
   def call(self, decoder_input, hidden_states, encoder_output):
     # decoder_input shape [batch_size, 1]
