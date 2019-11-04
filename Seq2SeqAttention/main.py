@@ -5,23 +5,21 @@ import tensorflow as tf
 from sklearn.model_selection import train_test_split
 
 from utils import *
-from params import *
+import params
 from Trainer import *
 
 def main(args):
-    LSTM_SIZE = args.lstm_units
-    EMBEDDING_SIZE = args.embedding_size
-    BATCH_SIZE = args.batch_size
-    EPOCHS = args.epochs
-    
+    params.LSTM_SIZE = args.lstm_units
+    params.EMBEDDING_SIZE = args.embedding_size
+    params.BATCH_SIZE = args.batch_size
+    params.EPOCHS = args.epochs
+   
     files = args.file
     files = files.split(' ')
     print(files)
     if len(files) == 1:
         data = read_data(args.dir, args.file)
         en_lines, fr_lines = list(zip(*data))
-        #en_lines=en_lines[:30000]
-        #fr_lines=fr_lines[:30000]
     elif len(files) == 2:
         en_lines, fr_lines = read_data_files(args.dir, (files[0], files[1]))
     else:
@@ -46,12 +44,12 @@ def main(args):
 
     if args.training_type==1:
         print("Strating normal training loop with:\n  epochs {}\n  batch_szie {}\n  lstm_units {}\n  embedding_size {}\n  attention score {}"\
-                .format(EPOCHS, BATCH_SIZE, LSTM_SIZE, EMBEDDING_SIZE, args.attention_type))
+                .format(params.EPOCHS, params.BATCH_SIZE, params.LSTM_SIZE, params.EMBEDDING_SIZE, args.attention_type))
         train_losses, test_losses = train( \
             en_data, fr_data, en_test, fr_test, (en_vocab_size, fr_vocab_size), fr_tokenizer, en_tokenizer, args.attention_type)
     elif args.training_type==2:
         print("Starting distributed training loop with:\n  epochs {}\n  batch_szie {}\n  lstm_units {}\n  embedding_size {}\n  attention score {}"\
-                .format(EPOCHS, BATCH_SIZE, LSTM_SIZE, EMBEDDING_SIZE, args.attention_type))
+                .format(params.EPOCHS, params.BATCH_SIZE, params.LSTM_SIZE, params.EMBEDDING_SIZE, args.attention_type))
         train_losses, test_lossses = distributedTrain( \
             en_data, fr_data, en_test, fr_test, (en_vocab_size, fr_vocab_size), fr_tokenizer, en_tokenizer, args.attention_type)
 

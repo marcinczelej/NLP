@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 
-from params import *
+import params
 from model import *
 
 def train(en_data, fr_data, en_test, fr_test, vocab_data, fr_tokenizer, en_tokenizer, attention_type):
@@ -11,13 +11,13 @@ def train(en_data, fr_data, en_test, fr_test, vocab_data, fr_tokenizer, en_token
     
     train_dataset = tf.data.Dataset.from_tensor_slices((en_train, fr_train_in, fr_train_out))
     train_dataset = train_dataset.shuffle(len(en_train), reshuffle_each_iteration=True)\
-                                 .batch(BATCH_SIZE, drop_remainder=True)
+                                 .batch(params.BATCH_SIZE, drop_remainder=True)
 
     test_dataset = tf.data.Dataset.from_tensor_slices((en_test_tokenized, fr_test, fr_test_tokenized))
     test_dataset = test_dataset.shuffle(len(en_test_tokenized), reshuffle_each_iteration=True)\
-                               .batch(BATCH_SIZE, drop_remainder=True)
+                               .batch(params.BATCH_SIZE, drop_remainder=True)
 
-    # lost function with zeros masked
+    #lost function with zeros masked
     def loss_fn(real, targets):
       loss = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
       mask = tf.math.logical_not(tf.math.equal(targets, 0))
@@ -32,8 +32,8 @@ def train(en_data, fr_data, en_test, fr_test, vocab_data, fr_tokenizer, en_token
     training_loss = tf.keras.metrics.Mean()
     optim = tf.keras.optimizers.Adam(clipnorm=0.5)
 
-    encoder = Encoder(LSTM_SIZE, EMBEDDING_SIZE, en_vocab_size)
-    decoder = Decoder(LSTM_SIZE, EMBEDDING_SIZE, fr_vocab_size, attention_type)
+    encoder = Encoder(params.LSTM_SIZE, params.EMBEDDING_SIZE, en_vocab_size)
+    decoder = Decoder(params.LSTM_SIZE, params.EMBEDDING_SIZE, fr_vocab_size, attention_type)
 
     def predict_output(en_sentence, fr_sentence):
         should_be_sentence = fr_sentence
@@ -67,9 +67,9 @@ def train(en_data, fr_data, en_test, fr_test, vocab_data, fr_tokenizer, en_token
     @tf.function
     def test_step(en_data, fr_data_tokenized):
         loss =0
-        initial_states = encoder.init_states(BATCH_SIZE)
+        initial_states = encoder.init_states(params.BATCH_SIZE)
         encoder_output, state_h, state_c = encoder(en_data, initial_states, training=False)
-        decoder_input = tf.constant(fr_tokenizer.word_index['<start>'], shape=(BATCH_SIZE, 1))
+        decoder_input = tf.constant(fr_tokenizer.word_index['<start>'], shape=(params.BATCH_SIZE, 1))
         
         for i in range(fr_data_tokenized.shape[1]):
             decoder_output, state_h, state_c = decoder(
@@ -102,11 +102,11 @@ def train(en_data, fr_data, en_test, fr_test, vocab_data, fr_tokenizer, en_token
 
       return loss / fr_data_out.shape[1]
     
-    print("batches each epoch : ", len(en_train)/BATCH_SIZE)
-    print(" batches per epoch: ", len(fr_train_in)//BATCH_SIZE)
-
-    for epoch in range(EPOCHS):
-        initial_states = encoder.init_states(BATCH_SIZE)
+    print("batches each epoch : ", len(en_train)/params.BATCH_SIZE)
+    print(" batches per epoch: ", len(fr_train_in)//params.BATCH_SIZE)
+    
+    for epoch in range(params.EPOCHS):
+        initial_states = encoder.init_states(params.BATCH_SIZE)
 
         for batch, (en_data, fr_data_in, fr_data_out) in enumerate(train_dataset.take(-1)):
             loss = train_step(en_data, fr_data_in, fr_data_out, initial_states)
@@ -129,17 +129,19 @@ def train(en_data, fr_data, en_test, fr_test, vocab_data, fr_tokenizer, en_token
             decoder.save_weights('./saved_weights/Best_model_weights_decoder', save_format='tf')
             min_test_loss = test_losses[-1]
     return train_losses, test_losses
-            
+
+
+# distributed training using many GPU-s.             
 def distributedTrain(en_data, fr_data, en_test, fr_test, vocab_data, fr_tokenizer, en_tokenizer, attention_type):
     fr_train_in, fr_train_out, fr_test_tokenized = fr_data
     en_train, en_test_tokenized = en_data
     en_vocab_size, fr_vocab_size = vocab_data
 
     strategy = tf.distribute.MirroredStrategy()
-    GLOBAL_BATCH_SIZE = BATCH_SIZE*strategy.num_replicas_in_sync
+    GLOBAL_BATCH_SIZE = params.BATCH_SIZE*strategy.num_replicas_in_sync
     train_steps = len(en_train)//GLOBAL_BATCH_SIZE
     test_steps = len(en_test_tokenized)//GLOBAL_BATCH_SIZE
-    print("Number of epochs : {}" .format(EPOCHS))
+    print("Number of epochs : {}" .format(params.EPOCHS))
     print('Number of devices: {}'.format(strategy.num_replicas_in_sync))
     print("GLOBAL_BATCH_SIZE : {}" .format(GLOBAL_BATCH_SIZE))
     print("train batches each epoch : ", train_steps)
@@ -160,8 +162,8 @@ def distributedTrain(en_data, fr_data, en_test, fr_test, vocab_data, fr_tokenize
     min_test_loss = 10000.0
 
     with strategy.scope():
-        encoder = Encoder(LSTM_SIZE, EMBEDDING_SIZE, en_vocab_size)
-        decoder = Decoder(LSTM_SIZE, EMBEDDING_SIZE, fr_vocab_size, attention_type)
+        encoder = Encoder(params.LSTM_SIZE, params.EMBEDDING_SIZE, en_vocab_size)
+        decoder = Decoder(params.LSTM_SIZE, params.EMBEDDING_SIZE, fr_vocab_size, attention_type)
         optim = tf.keras.optimizers.Adam(clipnorm=0.5)
         loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(
                     from_logits=True, reduction=tf.keras.losses.Reduction.NONE)
@@ -169,7 +171,6 @@ def distributedTrain(en_data, fr_data, en_test, fr_test, vocab_data, fr_tokenize
         encoder.save_weights('./saved_weights/starting_model_encoder', save_format='tf')
         decoder.save_weights('./saved_weights/starting_model_decoder', save_format='tf')
         
-        # should get en_sentence after texts_to_sequences([...])
         def predict_output(en_sentence, fr_sentence):
             should_be_sentence = fr_sentence
             sentence = en_tokenizer.texts_to_sequences([en_sentence])
@@ -232,10 +233,10 @@ def distributedTrain(en_data, fr_data, en_test, fr_test, vocab_data, fr_tokenize
 
         def test_step(en_data, fr_data_tokenized):
             loss =0
-            initial_states = encoder.init_states(BATCH_SIZE)
+            initial_states = encoder.init_states(params.BATCH_SIZE)
             encoder_output, state_h, state_c = encoder(en_data, initial_states, training=False)
 
-            decoder_input = tf.constant(fr_tokenizer.word_index['<start>'], shape=(BATCH_SIZE, 1))
+            decoder_input = tf.constant(fr_tokenizer.word_index['<start>'], shape=(params.BATCH_SIZE, 1))
 
             for i in range(fr_data_tokenized.shape[1]): 
                 decoder_output, state_h, state_c = decoder(
@@ -251,15 +252,15 @@ def distributedTrain(en_data, fr_data, en_test, fr_test, vocab_data, fr_tokenize
                                                                    fr_data_tokenized,))
             return strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
 
-        for epoch in range(EPOCHS):
+        for epoch in range(params.EPOCHS):
             test_loss = 0.0
             training_loss = 0.0
-            initial_states = encoder.init_states(BATCH_SIZE)
+            initial_states = encoder.init_states(params.BATCH_SIZE)
 
-            for batch, (en_data, fr_data_in, fr_data_out) in enumerate(train_dist_dataset):
+            for _, (en_data, fr_data_in, fr_data_out) in enumerate(train_dist_dataset):
                 loss = distributed_train_step(en_data, fr_data_in, fr_data_out, initial_states)
                 training_loss+=loss
-            for batch, (en_data, fr_data, fr_data_tokenized) in enumerate(test_dist_dataset):
+            for _, (en_data, fr_data, fr_data_tokenized) in enumerate(test_dist_dataset):
                 loss = distributed_test_step(en_data, fr_data_tokenized)
                 test_loss+=loss
 
