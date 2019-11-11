@@ -54,23 +54,13 @@ def preprocessSeq(texts, tokenizer):
 
   return pad_sequences(texts, padding='post')
 
-def tokenizeData(fr_train_in, fr_train_out, fr_test, en_train, en_test):
-  fr_tokenizer = Tokenizer(filters='')
-
-  fr_tokenizer.fit_on_texts(fr_train_in)
-  fr_tokenizer.fit_on_texts(fr_train_out)
-  fr_tokenizer.fit_on_texts(fr_test)
-
-  fr_train_in = preprocessSeq(fr_train_in, fr_tokenizer)
-  fr_train_out = preprocessSeq(fr_train_out, fr_tokenizer)
-  fr_test_tokenized = preprocessSeq(fr_test, fr_tokenizer)
-
-  en_tokenizer = Tokenizer(filters='')
-
-  en_tokenizer.fit_on_texts(en_train)
-  en_tokenizer.fit_on_texts(en_test)
-
-  en_train = preprocessSeq(en_train, en_tokenizer)
-  en_test = preprocessSeq(en_test, en_tokenizer)
-
-  return (fr_tokenizer, en_tokenizer), (fr_train_in, fr_train_out, fr_test_tokenized), (en_train, en_test)
+def tokenizeInput(input_data, tokenizer):
+    
+    output_data = []
+    for data in input_data:
+        tokenizer.fit_on_texts(data)
+    
+    for data in input_data:
+        output_data.append(preprocessSeq(data, tokenizer))
+    
+    return output_data
