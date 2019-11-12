@@ -1,8 +1,11 @@
 import os
+import sys
 import argparse
 import matplotlib.pyplot as plt
 import tensorflow as tf
 from sklearn.model_selection import train_test_split
+
+sys.path.insert(0, r"../utilities")
 
 from utils import *
 import params
@@ -34,9 +37,14 @@ def main(args):
     fr_train_in = ['<start> ' + line for line in fr_train]
     fr_train_out = [line + ' <end>' for line in fr_train]
     
-    tokenizers, fr_data, en_data = tokenizeData(fr_train_in, fr_train_out, fr_test, en_train, en_test)
+    fr_tokenizer = Tokenizer(filters='')
+    en_tokenizer = Tokenizer(filters='')
 
-    fr_tokenizer, en_tokenizer = tokenizers
+    input_data = [fr_train_in, fr_train_out, fr_test]
+    fr_data = tokenizeInput(input_data, fr_tokenizer)
+
+    input_data = [en_train, en_test]
+    en_data = tokenizeInput(input_data, en_tokenizer)
 
     en_vocab_size = len(en_tokenizer.word_index)+1
     fr_vocab_size = len(fr_tokenizer.word_index)+1
@@ -46,12 +54,12 @@ def main(args):
         print("Strating normal training loop with:\n  epochs {}\n  batch_szie {}\n  lstm_units {}\n  embedding_size {}\n  attention score {}"\
                 .format(params.EPOCHS, params.BATCH_SIZE, params.LSTM_SIZE, params.EMBEDDING_SIZE, args.attention_type))
         train_losses, test_losses = train( \
-            en_data, fr_data, en_test, fr_test, (en_vocab_size, fr_vocab_size), fr_tokenizer, en_tokenizer, args.attention_type)
+            en_data, fr_data, en_test, fr_test, fr_tokenizer, en_tokenizer, args.attention_type)
     elif args.training_type==2:
         print("Starting distributed training loop with:\n  epochs {}\n  batch_szie {}\n  lstm_units {}\n  embedding_size {}\n  attention score {}"\
                 .format(params.EPOCHS, params.BATCH_SIZE, params.LSTM_SIZE, params.EMBEDDING_SIZE, args.attention_type))
         train_losses, test_lossses = distributedTrain( \
-            en_data, fr_data, en_test, fr_test, (en_vocab_size, fr_vocab_size), fr_tokenizer, en_tokenizer, args.attention_type)
+            en_data, fr_data, en_test, fr_test, fr_tokenizer, en_tokenizer, args.attention_type)
 
     fig = plt.figure()
     fig_plot = fig.add_subplot()
@@ -71,7 +79,7 @@ if __name__ == "__main__":
     parser.add_argument('--training_type',type=int,  default=1, help="set implementation to use : 1. single GPU/CPU training   2.distributed training    Default=1")
     parser.add_argument('--attention_type', type=str,  default="concat", help="set  attention score type to use: 1.dot   2.general   3.concat    Default=concat")
     parser.add_argument('--epochs', type=int, default=60, help="set EPOCHS number. Default=60")
-    parser.add_argument('--dir', type=str, default="data/fra-eng", help="set directory with input data. Default=data/fra-eng")
+    parser.add_argument('--dir', type=str, default="../data/fra-eng", help="set directory with input data. Default=data/fra-eng")
     parser.add_argument('--file', type=str, default="fra.txt", help="set name of data files. For multiple files should be en_file_name fr_file_name Default=fra.txt")
     args = parser.parse_args()
 

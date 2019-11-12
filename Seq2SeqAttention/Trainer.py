@@ -4,10 +4,11 @@ import numpy as np
 import params
 from model import *
 
-def train(en_data, fr_data, en_test, fr_test, vocab_data, fr_tokenizer, en_tokenizer, attention_type):
+def train(en_data, fr_data, en_test, fr_test, fr_tokenizer, en_tokenizer, attention_type):
     fr_train_in, fr_train_out, fr_test_tokenized = fr_data
     en_train, en_test_tokenized = en_data
-    en_vocab_size, fr_vocab_size = vocab_data
+    en_vocab_size = len(en_tokenizer.word_index)+1
+    fr_vocab_size = len(fr_tokenizer.word_index)+1
     
     train_dataset = tf.data.Dataset.from_tensor_slices((en_train, fr_train_in, fr_train_out))
     train_dataset = train_dataset.shuffle(len(en_train), reshuffle_each_iteration=True)\
@@ -132,10 +133,11 @@ def train(en_data, fr_data, en_test, fr_test, vocab_data, fr_tokenizer, en_token
 
 
 # distributed training using many GPU-s.             
-def distributedTrain(en_data, fr_data, en_test, fr_test, vocab_data, fr_tokenizer, en_tokenizer, attention_type):
+def distributedTrain(en_data, fr_data, en_test, fr_test, fr_tokenizer, en_tokenizer, attention_type):
     fr_train_in, fr_train_out, fr_test_tokenized = fr_data
     en_train, en_test_tokenized = en_data
-    en_vocab_size, fr_vocab_size = vocab_data
+    en_vocab_size = len(en_tokenizer.word_index)+1
+    fr_vocab_size = len(fr_tokenizer.word_index)+1
 
     strategy = tf.distribute.MirroredStrategy()
     GLOBAL_BATCH_SIZE = params.BATCH_SIZE*strategy.num_replicas_in_sync
