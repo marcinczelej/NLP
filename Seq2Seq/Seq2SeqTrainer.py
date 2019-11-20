@@ -119,7 +119,7 @@ class Seq2SeqTrainer:
                 predicted_data, _, _ = self.decoder(decoder_in, encoder_states[1:], training=False)
                 loss = compute_loss(predicted_data, decoder_out)
 
-                train_accuracy.update_state(decoder_out, predicted_data)
+                test_accuracy.update_state(decoder_out, predicted_data)
                 return loss
 
             @tf.function
@@ -137,7 +137,6 @@ class Seq2SeqTrainer:
                 initial_state = self.encoder.init_states(self.batch_size)
                 total_loss = 0.0
                 num_batches = 0
-                print("train_step")
                 for _, (en_data, fr_data_in, fr_data_out) in enumerate(train_dataset_distr):
                     loss = distributed_train_step(en_data, fr_data_in, fr_data_out, initial_state)
                     total_loss += loss
@@ -145,7 +144,6 @@ class Seq2SeqTrainer:
                 train_losses.append(total_loss/num_batches)
                 total_loss = 0.0
                 num_batches = 0
-                print("test_Step")
                 for _, (en_data, fr_data_in, fr_data_out) in enumerate(test_dataset_distr):
                     loss = distributed_test_step(en_data, fr_data_in, fr_data_out)
                     total_loss += loss
@@ -158,10 +156,12 @@ class Seq2SeqTrainer:
                                                       train_accuracy.result(),
                                                       test_losses[-1],
                                                       test_accuracy.result()))
+                train_accuracyVec.append(train_accuracy.result())
+                test_accuracyVec.append(test_accuracy.result())
                 if epoch % self.predict_every == 0:
                     try:
                         idx = np.random.randint(low=0, high=len(en_test), size=1)[0]
                         predict(en_test[idx], fr_test_out[idx])
                     except:
                         print(" prediction thrown...")
-                    
+        return (train_losses, test_losses), (train_accuracyVec, test_accuracyVec)
