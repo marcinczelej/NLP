@@ -48,8 +48,8 @@ class Seq2SeqAttentionTrainer:
         train_losses = []
         train_accuracyVec = []
         test_accuracyVec =[]
-        test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
-        train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
+        test_accuracy = tf.keras.metrics.Mean()
+        train_accuracy = tf.keras.metrics.Mean()
         one_step_test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
         min_test_loss = 10000.0
 
@@ -59,11 +59,10 @@ class Seq2SeqAttentionTrainer:
             self.optimizer = tf.keras.optimizers.Adam(clipnorm=0.5)
 
             def predict_output(en_sentence, fr_sentence):
-                should_be_sentence = fr_sentence
-                sentence = self.en_tokenizer.texts_to_sequences([en_sentence])
-
+                real_en_sentence =' '.join([self.en_tokenizer.index_word[i] for i in en_sentence if i not in [0]]) 
+                en_sentence = tf.expand_dims(en_sentence, 0)
                 initial_states = self.encoder.init_states(1)
-                encoder_out, state_h, state_c = self.encoder(tf.constant(sentence), initial_states, training=False)
+                encoder_out, state_h, state_c = self.encoder(tf.constant(en_sentence), initial_states, training=False)
 
                 decoder_in = tf.constant([[self.fr_tokenizer.word_index['<start>']]])
                 sentence = []
@@ -79,10 +78,11 @@ class Seq2SeqAttentionTrainer:
                     sentence.append(word)
 
                 predicted_sentence = ' '.join(sentence)
+                
                 print("----------------------------PREDICTION----------------------------")
-                print("       En sentence {} " .format(en_sentence))
+                print("       En sentence {} " .format(real_en_sentence))
                 print("       Predicted:  {} " .format(predicted_sentence))
-                print("       Should be:  {} " .format(should_be_sentence))
+                print("       Should be:  {} " .format(fr_sentence))
                 print("--------------------------END PREDICTION--------------------------")
 
             loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(
@@ -95,6 +95,7 @@ class Seq2SeqAttentionTrainer:
             
             # one training step
             def train_step(en_data, fr_data_in, fr_data_out, initial_states):
+                loss = 0
                 one_step_test_accuracy.reset_states()
                 with tf.GradientTape() as tape:
                     encoder_output, state_h, state_c = self.encoder(en_data, initial_states, training=True)
@@ -105,16 +106,14 @@ class Seq2SeqAttentionTrainer:
                                                                         (state_h, state_c),
                                                                         encoder_output,
                                                                         training=True)
-                        print("decoder_output ", decoder_output)
-                        print("fr_data_out[:,i] ", fr_data_out[:,i])
                         loss +=compute_loss(decoder_output, fr_data_out[:,i])
-                        #one_step_test_accuracy.update_states(decoder_output, fr_data_out[:,i])
+                        one_step_test_accuracy.update_state(decoder_output, fr_data_out[:,i])
 
                 trainable_vars = self.encoder.trainable_variables + self.decoder.trainable_variables
                 grads = tape.gradient(loss, trainable_vars)
                 self.optimizer.apply_gradients(zip(grads, trainable_vars))
 
-                train_accuracy.update_states(one_step_test_accuracy.result())
+                train_accuracy.update_state(one_step_test_accuracy.result())
                 return loss / fr_data_out.shape[1]
 
             @tf.function
@@ -127,6 +126,7 @@ class Seq2SeqAttentionTrainer:
                 return self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
 
             def test_step(en_data, fr_data_out):
+                loss = 0
                 one_step_test_accuracy.reset_states()
                 initial_states = self.encoder.init_states(self.batch_size)
                 encoder_output, state_h, state_c = self.encoder(en_data, initial_states, training=False)
@@ -140,10 +140,10 @@ class Seq2SeqAttentionTrainer:
                                                                     training=False)
                     decoder_input =tf.expand_dims(tf.argmax(decoder_output, 1),1)
                     loss +=compute_loss(decoder_output, fr_data_out[:,i])
-                    one_step_test_accuracy.update_states(decoder_output, fr_data_out[:,i])
+                    one_step_test_accuracy.update_state(decoder_output, fr_data_out[:,i])
                 
-                train_accuracy.update_states(one_step_test_accuracy.result())
-                return loss/fr_data_tokenized.shape[1]
+                train_accuracy.update_state(one_step_test_accuracy.result())
+                return loss/fr_data_out.shape[1]
 
             @tf.function
             def distributed_test_step(en_data, fr_data_out):
@@ -151,7 +151,9 @@ class Seq2SeqAttentionTrainer:
                                                                  args=(en_data,
                                                                        fr_data_out,))
                 return self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
-
+            print("starting training with {} epochs with prediction each {} epoch" .format(epochs, self.predict_every))
+            idx = np.random.randint(low=0, high=len(en_test), size=1)[0]
+            predict_output(en_test[idx], fr_test_out[idx])
             for epoch in range(epochs):
                 test_accuracy.reset_states()
                 train_accuracy.reset_states()
@@ -178,19 +180,16 @@ class Seq2SeqAttentionTrainer:
                                                   train_accuracy.result(),
                                                   test_losses[-1],
                                                   test_accuracy.result()))
-
+                """
                 if (test_losses[-1]) < min_test_loss:
                     encoder.save_weights('./saved_weights/Best_model_weights_encoderAttention', save_format='tf')
                     decoder.save_weights('./saved_weights/Best_model_weights_decoderAttention', save_format='tf')
                     min_test_loss = test_loss/test_steps
-
+                """
                 train_accuracyVec.append(train_accuracy.result())
                 test_accuracyVec.append(test_accuracy.result())
-                if epoch % self.predict_every == 0:
-                    try:
-                        idx = np.random.randint(low=0, high=len(en_test), size=1)[0]
-                        predict(en_test[idx], fr_test_out[idx])
-                    except:
-                        print(" prediction thrown...")
+                if epoch % self.predict_every == 0:         
+                    idx = np.random.randint(low=0, high=len(en_test), size=1)[0]
+                    predict_output(en_test[idx], fr_test_out[idx])
 
         return (train_losses, test_losses), (train_accuracyVec, test_accuracyVec)
