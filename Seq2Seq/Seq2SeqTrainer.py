@@ -16,10 +16,13 @@ class Seq2SeqTrainer:
         self.fr_tokenizer = None
         self.en_tokenizer = None
 
-    def train(self, train_dataset_data, test_dataset_data, tokenizers, epochs):
+    def train(self, train_dataset_data, test_dataset_data, tokenizers, epochs, restore_checkpoint=True):
         """
-            train_dataset_data should be made from (en_train, fr_train_in, fr_train_out)
-            test_dataset_data should be made from (en_test, fr_test_in, fr_test_out)
+            parameters:
+                train_dataset_data, test_dataset_data, tokenizers, epochs, restore_checkpoint=True
+                
+                train_dataset_data should be made from (en_train, fr_train_in, fr_train_out)
+                test_dataset_data should be made from (en_test, fr_test_in, fr_test_out)
         """
         
         self.en_tokenizer, self.fr_tokenizer = tokenizers
@@ -56,6 +59,20 @@ class Seq2SeqTrainer:
             self.optimizer = tf.keras.optimizers.Adam(clipnorm=5.0)
             self.encoder = Encoder(en_vocab_size, self.embedding_size, self.lstm_size)
             self.decoder = Decoder(fr_vocab_size, self.embedding_size, self.lstm_size)
+            
+            ckpt = tf.train.Checkpoint(encoder=self.encoder,
+                                       decoder = self.decoder,
+                                       optimizer=self.optimizer,
+                                       epoch=tf.Variable(1))
+
+            manager = tf.train.CheckpointManager(ckpt, "./checkpoints/train", max_to_keep=5)
+
+            
+            if manager.latest_checkpoint and restore_checkpoint:
+                ckpt.restore(manager.latest_checkpoint)
+                print ('Latest checkpoint restored!!')
+            else:
+                print("training from scratch")
 
             loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, 
                                                                      reduction="none") 
@@ -149,7 +166,6 @@ class Seq2SeqTrainer:
                     total_loss += loss
                     num_batches += 1
                 test_losses.append(total_loss/num_batches)
-
                 print ('Epoch {} training Loss {:.4f} Accuracy {:.4f}  test Loss {:.4f} Accuracy {:.4f}' .format(
                                                       epoch + 1, 
                                                       train_losses[-1], 
@@ -158,6 +174,11 @@ class Seq2SeqTrainer:
                                                       test_accuracy.result()))
                 train_accuracyVec.append(train_accuracy.result())
                 test_accuracyVec.append(test_accuracy.result())
+                ckpt.epoch.assign_add(1)
+                if int(epoch) % 5 == 0:
+                    save_path = manager.save()
+                    print("Saving checkpoint for epoch {}: {}".format(epoch, save_path))
+
                 if epoch % self.predict_every == 0:
                     try:
                         idx = np.random.randint(low=0, high=len(en_test), size=1)[0]

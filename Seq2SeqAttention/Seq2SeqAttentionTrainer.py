@@ -16,7 +16,7 @@ class Seq2SeqAttentionTrainer:
         self.fr_tokenizer = None
         self.en_tokenizer = None
 
-    def train(self, train_dataset_data, test_dataset_data, tokenizers, epochs, attention_type):
+    def train(self, train_dataset_data, test_dataset_data, tokenizers, epochs, attention_type, restore_checkpoint=True):
         """
             train_dataset_data should be made from (en_train, fr_train_in, fr_train_out)
             test_dataset_data should be made from (en_test, fr_test_in, fr_test_out)
@@ -51,15 +51,29 @@ class Seq2SeqAttentionTrainer:
         test_accuracy = tf.keras.metrics.Mean()
         train_accuracy = tf.keras.metrics.Mean()
         one_step_test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
-        min_test_loss = 10000.0
 
         with self.strategy.scope():
             self.encoder = Encoder(self.lstm_size, self.embedding_size, en_vocab_size)
             self.decoder = Decoder(self.lstm_size, self.embedding_size, fr_vocab_size, attention_type)
             self.optimizer = tf.keras.optimizers.Adam(clipnorm=0.5)
+            
+            ckpt = tf.train.Checkpoint(encoder=self.encoder,
+                                       decoder = self.decoder,
+                                       optimizer=self.optimizer,
+                                       epoch=tf.Variable(1))
+
+            manager = tf.train.CheckpointManager(ckpt, "./checkpoints/train", max_to_keep=5)
+
+            
+            if manager.latest_checkpoint and restore_checkpoint:
+                ckpt.restore(manager.latest_checkpoint)
+                print ('Latest checkpoint restored!!')
+            else:
+                print("training from scratch")
 
             def predict_output(en_sentence, fr_sentence):
                 real_en_sentence =' '.join([self.en_tokenizer.index_word[i] for i in en_sentence if i not in [0]]) 
+                fr_sentence = ' '.join([self.fr_tokenizer.index_word[i] for i in fr_sentence if i not in [0]]) 
                 en_sentence = tf.expand_dims(en_sentence, 0)
                 initial_states = self.encoder.init_states(1)
                 encoder_out, state_h, state_c = self.encoder(tf.constant(en_sentence), initial_states, training=False)
@@ -152,8 +166,6 @@ class Seq2SeqAttentionTrainer:
                                                                        fr_data_out,))
                 return self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
             print("starting training with {} epochs with prediction each {} epoch" .format(epochs, self.predict_every))
-            idx = np.random.randint(low=0, high=len(en_test), size=1)[0]
-            predict_output(en_test[idx], fr_test_out[idx])
             for epoch in range(epochs):
                 test_accuracy.reset_states()
                 train_accuracy.reset_states()
@@ -180,16 +192,17 @@ class Seq2SeqAttentionTrainer:
                                                   train_accuracy.result(),
                                                   test_losses[-1],
                                                   test_accuracy.result()))
-                """
-                if (test_losses[-1]) < min_test_loss:
-                    encoder.save_weights('./saved_weights/Best_model_weights_encoderAttention', save_format='tf')
-                    decoder.save_weights('./saved_weights/Best_model_weights_decoderAttention', save_format='tf')
-                    min_test_loss = test_loss/test_steps
-                """
+                
                 train_accuracyVec.append(train_accuracy.result())
                 test_accuracyVec.append(test_accuracy.result())
+                ckpt.epoch.assign_add(1)
+                if int(epoch) % 5 == 0:
+                    save_path = manager.save()
+                    print("Saving checkpoint for epoch {}: {}".format(epoch, save_path))
                 if epoch % self.predict_every == 0:         
                     idx = np.random.randint(low=0, high=len(en_test), size=1)[0]
                     predict_output(en_test[idx], fr_test_out[idx])
+            save_path = manager.save()
+            print ('Saving checkpoint for end at {}'.format(save_path))
 
         return (train_losses, test_losses), (train_accuracyVec, test_accuracyVec)
