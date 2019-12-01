@@ -39,6 +39,7 @@ class TransformerTrainer:
         self.optimizer = None
         self.fr_tokenizer = None
         self.en_tokenizer = None
+        self.checkpoint_path = "./checkpoints/train"
 
     def train(self, train_dataset_data, test_dataset_data, tokenizers, epochs, restore_checkpoint=True):
         """
@@ -103,7 +104,7 @@ class TransformerTrainer:
                                     optimizer=self.optimizer,
                                     epoch=tf.Variable(1))
 
-          manager = tf.train.CheckpointManager(ckpt, "./checkpoints/train", max_to_keep=5)
+          manager = tf.train.CheckpointManager(ckpt, self.checkpoint_path, max_to_keep=5)
 
 
           if manager.latest_checkpoint and restore_checkpoint:

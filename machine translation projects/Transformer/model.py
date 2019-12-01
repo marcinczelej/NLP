@@ -1,6 +1,17 @@
 import numpy as np
 import tensorflow as tf
 
+def loadWeights(transformer_model, checkpointPath):
+    ckpt = tf.train.Checkpoint(transformer=transformer_model)
+
+    manager = tf.train.CheckpointManager(ckpt, checkpointPath, max_to_keep=5)
+
+    if manager.latest_checkpoint:
+      ckpt.restore(manager.latest_checkpoint).expect_partial()
+      print ('Latest checkpoint restored!!')
+    else:
+      print("Failed to restore checkpoint")
+    
 class PositionalEncodingLayer(tf.keras.layers.Layer):
   def __init__(self, embedding_size, max_sentence_len, dtype=tf.float32, **kwargs):
     super(PositionalEncodingLayer, self).__init__(dtype, **kwargs)
