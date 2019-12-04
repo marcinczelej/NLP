@@ -179,7 +179,7 @@ class TransformerTrainer:
               real_in = tf.expand_dims(real_in, 0)
               end_tag = self.fr_tokenizer.texts_to_sequences(['<end>'])[0][0]
               input_data = tf.expand_dims(input_data, 0)
-              for _ in range(input_data.shape[1]):
+              for _ in range(real_data_out.shape[1]):
                   encoder_pad_mask = makePaddingMask(input_data)
                   elements_mask = makeSequenceMask(real_in.shape[1])
                   predicted_data = self.transformer_model(input_data, real_in, encoder_pad_mask, elements_mask, training_enabled=False, training=True)
