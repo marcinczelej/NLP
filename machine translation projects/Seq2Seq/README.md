@@ -1,5 +1,12 @@
 # Seq2Seq model
 
+### TODO
+- [x] write report
+- [ ] add results to report
+- [ ] add beam search
+- [ ] add bleu score
+- [ ] make collab notebook
+
 ### Overwiew
 Seq2Seq model is encoder-decoder machine learning alghoritm that can be used in
  - Machine Translation
