@@ -2,10 +2,10 @@
 
 ### TODO
 - [x] write report
-- [ ] add results to report
+- [x] add results to report
 - [ ] add beam search
 - [ ] add bleu score
-- [ ] make collab notebook
+- [x] make collab notebook
 
 ### Overwiew
 Seq2Seq model is encoder-decoder machine learning alghoritm that can be used in
@@ -31,13 +31,17 @@ We can see that there are two inputs:
 And one output:
 - decoder translated output
 
+### Colab notebook
+
+link to Colab notebook can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/Seq2Seq/Seq2SeqColab.ipynb)
+
 ### Encoder
 
 Encoder part is straightforward and is build from Embedding layer  + LSTM layers that returns hidden states/ last state. Those info are then passed to decoder as input, with decoder Desired translation input. As for encoder input, we get hidden states + input sequence we want to encode.
 
 Let first forcus on structure of encoder, on what we need and what shapes w will have during each step of encoder part ( generally for me, writing shapes can help to understand what`s going on inside and check if implementation is good or not)
 
-![Seq2Seq Encoder shapes](../imgs/Encoder_shapes.jpg)
+![Seq2Seq Encoder shapes](../imgs/Seq2Seq/Encoder_shapes.jpg)
 
 No now when we have information about shapes it is easy to implement:
 
@@ -76,7 +80,7 @@ Decoder part is also straightforward and build from Embedding layer + LSTM layer
 As input Decoder gets hidden states from encoder output + desired sequence starting with <start> tag.
 Again it`s good to visualise input shapes before diving into coding.
 
-![Seq2Seq Decoder shapes](../imgs/Decoder_shapes.jpg)
+![Seq2Seq Decoder shapes](../imgs/Seq2Seq/Decoder_shapes.jpg)
 
 And corresponding code:
 
@@ -387,3 +391,15 @@ One more thing that's going on here is saving model/optimizer value each x inter
 Whole training process code can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/Seq2Seq/Seq2SeqTrainer.py)
 
 7. **Results**
+
+Accuracy plot:
+
+![Accuracy plot](../imgs/Seq2Seq/accuracy_plot.png)
+
+Accuracy seems similiar between training and testing sets
+
+Loss plot:
+
+![Loss plot](../imgs/Seq2Seq/losses_plot.png)
+
+We can see that during 20 epochs model starts to flatten it`s loss chart.

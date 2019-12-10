@@ -16,6 +16,31 @@ class Seq2SeqTrainer:
         self.fr_tokenizer = None
         self.en_tokenizer = None
 
+    def predict(self, input_data, real_data_out):
+      en_sentence = self.en_tokenizer.sequences_to_texts([input_data])
+      input_data = tf.expand_dims(input_data, 0)
+      initial_states = self.encoder.init_states(1)
+      _, state_h, state_c = self.encoder(tf.constant(input_data), initial_states, training=False)
+
+      symbol = tf.constant([[self.fr_tokenizer.word_index['<start>']]])
+      sentence = []
+
+      while True:
+          symbol, state_h, state_c = self.decoder(symbol, (state_h, state_c), training=False)
+          # argmax to get max index 
+          symbol = tf.argmax(symbol, axis=-1)
+          word = self.fr_tokenizer.index_word[symbol.numpy()[0][0]]
+
+          if word == '<end>' or len(sentence) >= len(real_data_out):
+              break
+
+          sentence.append(word)
+      print("--------------PREDICTION--------------")
+      print("  English   :  {}" .format(en_sentence))
+      print("  Predicted :  {}" .format(' '.join(sentence)))
+      print("  Correct   :  {}" .format(self.fr_tokenizer.sequences_to_texts([real_data_out[:-1]])))
+      print("------------END PREDICTION------------")
+
     def train(self, train_dataset_data, test_dataset_data, tokenizers, epochs, restore_checkpoint=True):
         """
             parameters:
@@ -81,31 +106,6 @@ class Seq2SeqTrainer:
                 mask = tf.cast(mask, tf.int64)
                 per_example_loss = loss_obj(labels, predictions, sample_weight=mask)
                 return tf.nn.compute_average_loss(per_example_loss, global_batch_size=GLOBAL_BATCH_SIZE)
-
-            def predict(input_data, real_data_out):
-                en_sentence = self.en_tokenizer.sequences_to_texts([input_data])
-                input_data = tf.expand_dims(input_data, 0)
-                initial_states = self.encoder.init_states(1)
-                _, state_h, state_c = self.encoder(tf.constant(input_data), initial_states, training=False)
-
-                symbol = tf.constant([[self.fr_tokenizer.word_index['<start>']]])
-                sentence = []
-
-                while True:
-                    symbol, state_h, state_c = self.decoder(symbol, (state_h, state_c), training=False)
-                    # argmax to get max index 
-                    symbol = tf.argmax(symbol, axis=-1)
-                    word = self.fr_tokenizer.index_word[symbol.numpy()[0][0]]
-
-                    if word == '<end>' or len(sentence) >= len(real_data_out):
-                        break
-
-                    sentence.append(word)
-                print("--------------PREDICTION--------------")
-                print("  English   :  {}" .format(en_sentence))
-                print("  Predicted :  {}" .format(' '.join(sentence)))
-                print("  Correct   :  {}" .format(self.fr_tokenizer.sequences_to_texts([real_data_out])))
-                print("------------END PREDICTION------------")
 
             # one training step
             def train_step(encoder_input, decoder_in, decoder_out, initial_states):
@@ -182,7 +182,7 @@ class Seq2SeqTrainer:
                 if epoch % self.predict_every == 0:
                     try:
                         idx = np.random.randint(low=0, high=len(en_test), size=1)[0]
-                        predict(en_test[idx], fr_test_out[idx])
+                        self.predict(en_test[idx], fr_test_out[idx])
                     except:
                         print(" prediction thrown...")
         return (train_losses, test_losses), (train_accuracyVec, test_accuracyVec)
