@@ -16,7 +16,7 @@ class Seq2SeqAttentionTrainer:
         self.fr_tokenizer = None
         self.en_tokenizer = None
 
-    def predict_output(en_sentence, fr_sentence):
+    def predict(en_sentence, fr_sentence):
         real_en_sentence =' '.join([self.en_tokenizer.index_word[i] for i in en_sentence if i not in [0]]) 
         fr_sentence = ' '.join([self.fr_tokenizer.index_word[i] for i in fr_sentence if i not in [0]]) 
         en_sentence = tf.expand_dims(en_sentence, 0)
@@ -201,7 +201,7 @@ class Seq2SeqAttentionTrainer:
                     print("Saving checkpoint for epoch {}: {}".format(epoch, save_path))
                 if epoch % self.predict_every == 0:         
                     idx = np.random.randint(low=0, high=len(en_test), size=1)[0]
-                    self.predict_output(en_test[idx], fr_test_out[idx])
+                    self.predict(en_test[idx], fr_test_out[idx])
             save_path = manager.save()
             print ('Saving checkpoint for end at {}'.format(save_path))
 

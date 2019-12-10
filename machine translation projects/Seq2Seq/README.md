@@ -8,7 +8,7 @@
 - [x] make collab notebook
 
 ### Overview
-Seq2Seq model is encoder-decoder machine learning alghoritm that can be used in
+Seq2Seq model is encoder-decoder machine learning algorithm that can be used in
  - Machine Translation
  - Text Summarization
  - Conversational Modeling
@@ -18,18 +18,20 @@ Seq2Seq model is encoder-decoder machine learning alghoritm that can be used in
 That was described in : [Sequence to Sequence Learning with Neural Networks](https://arxiv.org/pdf/1409.3215.pdf) paper, where math and detailed explanation can be found.
 
 In this case it is used for machine translation.
-As name sugests it's made from two parts/blocks as can be seen on diagram bolw: Encoder and Decoder. Decoder is often called language model. Additionally (from what  I figured out) its better not to dd anything to encoder input sentence ( no tags ) and only add `<start>` tag at the beginning of decoder input sentence and `<end>` tag at the end of decoder output sentence.
+As name suggests it's made from two parts/blocks as can be seen on diagram below: Encoder and Decoder. Decoder is often called language model. Additionally (from what  I figured out) its better not to dd anything to encoder input sentence ( no tags ) and only add `<start>` tag at the beginning of decoder input sentence and `<end>` tag at the end of decoder output sentence.
 
-Main idea is that Encoder encodes input sentence and return fixed length contex vector, that contains embedding information that encoded managed to get. In practice context vector is last hidden state of encoder block and it`s barely good summary of input sentence, it carries meaning of sentence, without any specific details about each word. This kind of information is then passed into decoder block as its input hidden state. 
+Main idea is that Encoder encodes input sentence and return fixed length context vector, that contains embedding information that encoded managed to get. In practice context vector is last hidden state of encoder block and it`s barely good summary of input sentence, it carries meaning of sentence, without any specific details about each word. This kind of information is then passed into decoder block as its input hidden state. 
 
 ![Seq2Seq overview](https://smerity.com/media/images/articles/2016/gnmt_arch_1_enc_dec.svg)
 [Source](https://smerity.com/articles/2016/google_nmt_arch.html)
 
 We can see that there are two inputs:
+
 - encoder Original sentence input
 - decoder Desired translation input
 
 And one output:
+
 - decoder translated output
 
 ### Colab notebook
@@ -40,7 +42,7 @@ link to Colab notebook can be found [here](https://github.com/mizzmir/NLP/blob/m
 
 Encoder part is straightforward and is build from Embedding layer  + LSTM layers that returns hidden states/ last state. Those info are then passed to decoder as input, with decoder Desired translation input. As for encoder input, we get hidden states + input sequence we want to encode.
 
-Let first forcus on structure of encoder, on what we need and what shapes w will have during each step of encoding process (generally for me, writing shapes can help to understand what`s going on inside and check if implementation is good or not)
+Let first focus on structure of encoder, on what we need and what shapes w will have during each step of encoding process (generally for me, writing shapes can help to understand what`s going on inside and check if implementation is good or not)
 
 ![Seq2Seq Encoder shapes](../imgs/Seq2Seq/Encoder_shapes.jpg)
 
@@ -73,13 +75,13 @@ class Encoder(tf.keras.Model):
                 tf.zeros([batch_size, self.units]))
 ```
 
-Because we have to get initial hiddent states for encoder, that are all zeros at the start of every training step, there is method init_states(...) added. It returns properly shaped hidden states. In case of using GRU layer, there will lbe only one hidden state , instead of two.
+Because we have to get initial hidden states for encoder, that are all zeros at the start of every training step, there is method init_states(...) added. It returns properly shaped hidden states. In case of using GRU layer, there will lbe only one hidden state , instead of two.
 
 ### Decoder
 
 Decoder part is also straightforward and build from Embedding layer + LSTM layer + Dense layer.
 As input Decoder gets hidden states from encoder output + desired sequence starting with <start> tag.
-Again it`s good to visualise input shapes before diving into coding.
+Again it`s good to visualize input shapes before diving into coding.
 
 ![Seq2Seq Decoder shapes](../imgs/Seq2Seq/Decoder_shapes.jpg)
 
@@ -115,7 +117,7 @@ Preprocessing is  process that has to be done so we can push data into our model
 
 - **data normalization**
 
-    In this step we're assuring that all sentences are in ascii format, cleaning wunwanted tokens, spaces before punctuations, changing to lowercase etc. Mostly constains general cleanup of text. It`s common to use two below methods (usually it's enough but somethins you want to add something extra for example leave some language specific characters or to leave some tokens)
+    In this step we're assuring that all sentences are in ascii format, cleaning unwanted tokens, spaces before punctuations, changing to lowercase etc. Mostly contains general cleanup of text. It`s common to use two below methods (usually it's enough but you may want to add something extra for example leave some language specific characters or to leave some tokens)
 
     ```python
     def unicode_to_ascii(s):
@@ -135,7 +137,7 @@ Preprocessing is  process that has to be done so we can push data into our model
 It's done by adding `<start>` or `<end>` token respectively.
 
 - **padding and tokenization**
-    Entences are zero padded, so they will be same length, and tokenized into vectors of tokens (integers) with choosen Tokenizer.
+    Sentences are zero padded, so they will be same length, and tokenized into vectors of tokens (integers) with proper Tokenizer.
     In this case build in tensorflow tokenizer wa used, but one can use nltk tokenizer, scipy tokenizer etc..
     We have to save both input and output language tokenizers to de-tokenize sentences later in prediction phase.
 
@@ -187,12 +189,12 @@ whole preprocess routine can be found [here](https://github.com/mizzmir/NLP/blob
 
 Now lets talk about training loop. In order to make use of multiple gpus, few things has to be done. Custom training loop using multiple GPUs in tensorflow 2.0 is nicely described [here](https://www.tensorflow.org/tutorials/distribute/custom_training)
 
-In order to use multiple GPU-s we have to create MirroredStrategy and then do whole training under its scope. Additionally we cannot use normal t.Datasets, becuase we want to "distribute it over multiple models on different GPUs. To do this we have to do two things:
+In order to use multiple GPU-s we have to create `MirroredStrategy` and then do whole training under its scope. Additionally we cannot use normal `tf.Datasets`, because we want to "distribute it over multiple models on different GPUs. To do this we have to do two things:
 
 1. set desired **BATCH_SIZE** for all models
 2. use `strategy.experimental_distribute_dataset` 
 
-As for first, we have to multiply desired BATCH_SIZE that we want to pass to single model, with number of GPUs we want to use. We can do this by simple `BATCH_SIZE * GUP_number` multiplication to use fixed number of GPUs, or use `strategy.num_replicas_in_sync` that will give us all available GPUs.
+As for first, we have to multiply desired **BATCH_SIZE** that we want to pass to single model, with number of GPUs we want to use. We can do this by simple `BATCH_SIZE * GUP_number` multiplication to use fixed number of GPUs, or use `strategy.num_replicas_in_sync` that will give us all available GPUs.
 
 ```python
     print ('Number of devices: {}'.format(self.strategy.num_replicas_in_sync))
@@ -202,9 +204,9 @@ As for first, we have to multiply desired BATCH_SIZE that we want to pass to sin
 Where:
     `self.strategy = tf.distribute.MirroredStrategy()`
 
-After this , during ach training step GLOBAL_BACH_SIZE samples wil be taken from dataset and distributed among all models, so we each model will get BATCH_SIZE batches that we want.
+After this , during ach training step **GLOBAL_BACH_SIZE** samples wil be taken from dataset and distributed among all models, so we each model will get **BATCH_SIZE** batches that we want.
 
-Now when we have out desired GLOBAL_BATCH_SIZE let's create train/test datasets. Because we`re using distributed training our desired batch_size will be **GLOBAL_BATCH_SIZE**.
+Now when we have out desired **GLOBAL_BATCH_SIZE** let's create train/test datasets. Because we`re using distributed training our desired batch_size will be **GLOBAL_BATCH_SIZE**.
 
 ```python
         train_dataset = tf.data.Dataset.from_tensor_slices((en_train, fr_train_in, fr_train_out))
@@ -244,10 +246,10 @@ The next thing to do is to define a loss function. Because sequence is padded wi
                 return tf.nn.compute_average_loss(per_example_loss, global_batch_size=GLOBAL_BATCH_SIZE)
 ```
 
-We're using `from_logit=True` because decoder output is not after softmax activation, so we're not passing propabilities, just values.
-mask is used to zero padded values and is passed to loss obj with `sample_weight` parameter. Same result can be obtainet by multiplying predicted data by mask and then passing result to `loss_obj`
+We're using `from_logit=True` because decoder output is not after softmax activation, so we're not passing probabilities, just values.
+mask is used to zero padded values and is passed to loss obj with `sample_weight` parameter. Same result can be obtained by multiplying predicted data by mask and then passing result to `loss_obj`
 
-Because we`re using ditributed training we have to take average loss. we can do the same thing by hand  with simple math:
+Because we`re using distributed training we have to take average loss. we can do the same thing by hand  with simple math:
 
 `output_loss = tf.reduce_sum(per_example_loss)*1./GLOBAL_BATCH_SIZE`
 
@@ -258,10 +260,10 @@ but tensorflow 2.0 has build in method to do this
 Train and test step are almost the same so I`ll get into train step and point different in test step
 Because we`re creating custom training loop there are two things we can use to speed up computations:
 
-- use `@tf.function` to use static graph computation. We have to use it only in one method, because every method called inside it will automatically using it. Additionally it will speed up calcualtions, due to optimalization tensorflow makes when it uses it.  **to debug code please remove it, use tf.print(...) not normal python print(...)**
+- use `@tf.function` to use static graph computation. We have to use it only in one method, because every method called inside it will automatically using it. Additionally it will speed up calculations, due to optimalization tensorflow makes when it uses it.  **to debug code please remove it, use tf.print(...) not normal python print(...)**
 - training step uses `tf.GradientTape()` to keep track of gradients and allow backpropagation.
 
-train_step(...) method makes one forward pass of training + applys gradients.
+train_step(...) method makes one forward pass of training + applies gradients.
 distributed_train_step(...) makes distributional part happens:
 
 - we have to use `tf.strategy.MirroredStrategy.experimental_run_v2(method_name, args=(... ,))`   <- **IMPORTANT COMA AT THE END**
@@ -320,7 +322,7 @@ Test_step differences:
 
 4. **Prediction step**
 
-It`s forward pass but feeded with <start> token at the beginnning.
+It`s forward pass but feeded with <start> token at the beginning.
 Next steps are basically:
 
 - take decoder output
@@ -356,7 +358,7 @@ Next steps are basically:
 
 5. **Main loop**
 
-Every eopch take proper batches and train/test. Additionally accuracy + losses are printed each x interations and losses/accuracy values are added to proper lists, so we can plot them after training finish.
+During every epoch we train/test our models on split datasets. Train/test accuracy and losses are printed each `N` iterations and losses/accuracy values are added to proper lists, so we can plot them after.
 
 ```python
            for epoch in range(epochs):
@@ -385,9 +387,9 @@ Every eopch take proper batches and train/test. Additionally accuracy + losses a
                                                       test_accuracy.result()))
 ```
 
-6. **Saving checkpoint**
+1. **Saving checkpoint**
 
-One more thing that's going on here is saving model/optimizer value each x interations. It's done with `tf.train.Checkpoint`. For details please see [tensorflow site](https://www.tensorflow.org/guide/checkpoint)
+One more thing that's going on here is saving model/optimizer value each `N` iterations. It's done with `tf.train.Checkpoint`. For details please see [tensorflow site](https://www.tensorflow.org/guide/checkpoint)
 
 Whole training process code can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/Seq2Seq/Seq2SeqTrainer.py)
 
