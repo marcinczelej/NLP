@@ -110,13 +110,19 @@ It`s done by taking softmax of score function. After this we have vector, that i
 
 3. When we have importance weights for each element, it`s time for calculating final step of our attention mechanism: **context vector**
 '
-Context vecotr is done by simply multiplying **alignment vector** with **encoder output**. This operation is nothing more than weighted average of encoder output. With this operation we have attention values for given timestep.
+Context vector is done by simply multiplying **alignment vector** with **encoder output**. This operation is nothing more than weighted average of encoder output. With this operation we have attention values for given timestep.
+
+![Context vector](../imgs/Seq2SeqAttention/context_vector.png)
 
 Because in attention we`re calculating output for each output timestep, it`s nice to visualise shapes again:
 
 ![Attention](../imgs/Seq2SeqAttention/Luang_attention_shapes.jpg)
 
 Main difference is between score functions we choose to use, but later on calculations are straightforward.
+
+* `dot` score function is best suited when both encoder and decoder have same embedding size/embedding space
+* `general` score function is better suited when encoder and decoder have different embedding space, that's the case when we`re doing language translation. The reason for that is weights matrix that is added between multiplication of encoder and decoder states.
+* `concat` can be use in all cases
 
 Whole attention claculations are done with below class:
 
