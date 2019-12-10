@@ -1,27 +1,31 @@
 # Seq2Seq model
 
 ### TODO
-- [x] write report
-- [x] add results to report
+- [ ] write report
+- [ ] add results to report
 - [ ] add beam search
 - [ ] add bleu score
-- [x] make collab notebook
+- [ ] make collab notebook
 
 ### Overview
-Seq2Seq model is encoder-decoder machine learning alghoritm that can be used in
+Seq2Seq model with Attention  is encoder-decoder machine learning alghoritm that uses Attention mechanism and  can be used in
  - Machine Translation
  - Text Summarization
  - Conversational Modeling
  - Image Captioning
  - and in every task when we have sequenced input and want to get some output
 
-That was described in : [Sequence to Sequence Learning with Neural Networks](https://arxiv.org/pdf/1409.3215.pdf) paper, where math and detailed explanation can be found.
+Classic Seq2Seq models have problem with processing long sequence, because thwy base on single, fixed length context vector. Additionally those models look at model we want to translate only one time, as a whole, and use this input to produce every part of output. Attention models allow to look at every single part of input and based on that they produce decoder output.
 
-In this case it is used for machine translation.
-As name sugests it's made from two parts/blocks as can be seen on diagram bolw: Encoder and Decoder. Decoder is often called language model. Additionally (from what  I figured out) its better not to dd anything to encoder input sentence ( no tags ) and only add `<start>` tag at the beginning of decoder input sentence and `<end>` tag at the end of decoder output sentence.
+Just line in Seq2Seq models without attention, Encoder part of Attention model, take input sentence we want to translate and during each timestep  it produces hidden states, one for ach sequence input. And here big difference appears.
 
-Main idea is that Encoder encodes input sentence and return fixed length contex vector, that contains embedding information that encoded managed to get. In practice context vector is last hidden state of encoder block and it`s barely good summary of input sentence, it carries meaning of sentence, without any specific details about each word. This kind of information is then passed into decoder block as its input hidden state. 
+In model without attention, only last hidden state vector is passed to Decoder, and becuase of that it has fixed length size (one hidden size), what leads to not so good results when handling longer sequences.
+In model with attention Decoder gets all of the hidden states that encoder produces. Benefit of this is visible when we`re handling longer sequences. Becuase we don`t have fixed length context vector, so longer sentences will have longer context vectors that will capture input sequence information better than fixed length vector.
 
+If we go one step further, we can say that becuase we have variable length of context vector, and each hidden state mostly captures information about corresponding elelment from input sequence. For example if we have 4 word sequence , then first hidden state captures first word the most, second second etc..
+Additionally each hidden state, because it was generated using LSTM/GRU, captures informations about whole snetence, word dependencies etc. so we have many more informations than in vanillia Seq2Seq models.
+
+#TODO: ADD GENERAL PICTURE
 ![Seq2Seq overview](https://smerity.com/media/images/articles/2016/gnmt_arch_1_enc_dec.svg)
 [Source](https://smerity.com/articles/2016/google_nmt_arch.html)
 
@@ -38,9 +42,10 @@ link to Colab notebook can be found [here](https://github.com/mizzmir/NLP/blob/m
 
 ### Encoder
 
-Encoder part is straightforward and is build from Embedding layer  + LSTM layers that returns hidden states/ last state. Those info are then passed to decoder as input, with decoder Desired translation input. As for encoder input, we get hidden states + input sequence we want to encode.
+Encoder part is the same as in vanillia Seq2Seq model, with only one difference: output data.
+Encoder part is straightforward and is build from Embedding layer  + LSTM layers that **returns all hidden states**. Those info are then passed to decoder as input, with decoder Desired translation input. As for encoder input, we get hidden states + input sequence we want to encode.
 
-Let first forcus on structure of encoder, on what we need and what shapes w will have during each step of encoding process (generally for me, writing shapes can help to understand what`s going on inside and check if implementation is good or not)
+Let first forcus on structure of encoder, on what we need and what shapes it will have during each step of encoding process (generally for me, writing shapes can help to understand what`s going on inside and check if implementation is good or not)
 
 ![Seq2Seq Encoder shapes](../imgs/Seq2Seq/Encoder_shapes.jpg)
 
@@ -73,41 +78,84 @@ class Encoder(tf.keras.Model):
                 tf.zeros([batch_size, self.units]))
 ```
 
-Because we have to get initial hiddent states for encoder, that are all zeros at the start of every training step, there is method init_states(...) added. It returns properly shaped hidden states. In case of using GRU layer, there will lbe only one hidden state , instead of two.
+Because we have to get initial hiddent states for encoder, that are all zeros at the start of every training step, there is method init_states(...) added. It returns properly shaped hidden states. In case of using GRU layer, there will be only one hidden state , instead of two.
 
-### Decoder
+#TODO: ADD PICTURES
+### Attention mechanism
 
-Decoder part is also straightforward and build from Embedding layer + LSTM layer + Dense layer.
-As input Decoder gets hidden states from encoder output + desired sequence starting with <start> tag.
-Again it`s good to visualise input shapes before diving into coding.
+In vanilia Seq2Seq model encoder information is passed only to first node/ first timestep of Decoder network. due to that this information will become less and less relevant every next time step. To solve this we would like to have encoder output available at every time step of decoder and this is main idea behind attention.
 
-![Seq2Seq Decoder shapes](../imgs/Seq2Seq/Decoder_shapes.jpg)
+We do this by creating **context vector**. Let me explain math behind it
 
-And corresponding code:
+1. We have to calculate so called **score** function
+
+here we have few options to choose from, as can be seen below:
+
+![Score functions](../imgs/Seq2SeqAttention/score_eq.png)
+
+where:
+ht - current decoder output state
+hs - all source states given by encoder
+
+Scoring function assigns score to each of the hidden states at given timestep "t". Higher the score, more important given hidden state is for given decoder timestep.
+
+2. When we have our score of each encoder hidden states, we can calculate so called **alignment vector**
+
+Alignment vector tells us what is propability/importance of each element using score value we calculated before.
+It`s main purpose is to say how important/ assigns weights for each hidden state of encoder for given timestep "t" in decoder. The highest propability, the most important given element is.
+
+It`s done by taking softmax of score function. After this we have vector, that is same length as source sequence, with propability/importance of each element. Shape of this vector should be intuitive, because we want some way to measure what hidden state to focus at given timestep, so we have to take weighted average ( what is done in next step) of all hidden states and to do this we need some kind of weights.
+
+![alingment vector](../imgs/Seq2SeqAttention/alignment_eq.png)
+
+3. When we have importance weights for each element, it`s time for calculating final step of our attention mechanism: **context vector**
+'
+Context vecotr is done by simply multiplying **alignment vector** with **encoder output**. This operation is nothing more than weighted average of encoder output. With this operation we have attention values for given timestep.
+
+Because in attention we`re calculating output for each output timestep, it`s nice to visualise shapes again:
+
+![Attention](../imgs/Seq2SeqAttention/Luang_attention_shapes.jpg)
+
+Main difference is between score functions we choose to use, but later on calculations are straightforward.
+
+Whole attention claculations are done with below class:
 
 ```python
-class Decoder(tf.keras.Model):
-  def __init__(self, vocab_size, embedding_size, units):
-    super(Decoder, self).__init__()
+class LuangAttention(tf.keras.Model):
+def __init__(self, lstm_size, attention_type):
+    super(LuangAttention, self).__init__()
 
-    self.embedding_layer = tf.keras.layers.Embedding(vocab_size, embedding_size)
-    self.lstm_layer = tf.keras.layers.LSTM(units, dropout=0.2, return_sequences=True,
-                                           return_state=True)
-    self.dense_layer = tf.keras.layers.Dense(vocab_size)
-  
-  def call(self, sequences, lstm_states):
-    # sequences shape = [batch_size, seq_max_len]
-    # embedding shape = [batch_size, seq_max_len, embedding_size]
-    # output shape = [batch_szie, seq_max_len, lstm_size]
-    # state_h, state_c = [batch_size, lstm_size] x2
-    # dense shape = [batch_size, seq_max_len, vocab_size]
-    
-    decoder_embedded = self.embedding_layer(sequences)
-    lstm_output, state_h, state_c = self.lstm_layer(decoder_embedded, lstm_states)
-    return self.dense_layer(lstm_output), state_h, state_c
+    self.W_a = tf.keras.layers.Dense(lstm_size, name="LuangAttention_W_a")
+    self.W_a_tanh = tf.keras.layers.Dense(lstm_size, activation="tanh", name="LuangAttention_W_a_tanh")
+    self.v_a = tf.keras.layers.Dense(1)
+    self.type = attention_type
+
+def call(self, decoder_output, encoder_output):
+    # encoder_output shape [batch_size, seq_max_len, hidden_units_of_encoder]
+    # decoder_output shape [batch_size, 1, hidden_units of decoder]
+    # score shape [batch_size, 1, seq_max_len]
+    if self.type == "dot":
+        score = tf.matmul(decoder_output, encoder_output, transpose_b=True)
+    elif self.type == "general":
+        score = tf.matmul(decoder_output, self.W_a(encoder_output), transpose_b=True)
+    elif self.type == "concat":
+        decoder_output = tf.broadcast_to(decoder_output, encoder_output.shape)
+        concated = self.W_a_tanh(tf.concat((decoder_output, encoder_output), axis=-1))
+        score = tf.transpose(self.v_a(concated), [0,2,1])
+    else:
+        raise Exception("wrong score function selected")
+        
+    alignment_vector = tf.nn.softmax(score, axis=2)
+    context_vector = tf.matmul(alignment_vector, encoder_output)
+
+    return context_vector, alignment_vector
 ```
+#TODO: WRITE
+### Decoder
 
-Both encoder and decoder code plus small shapes test can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/Seq2Seq/model.py)
+Decoder part is where the Attention magic happens. In vanillia Seq2Seq decoder was build same way as encoder, but with differnet input. It also looks at whole sequence at once and based on this one look + contex vector from encoder (last hidden state) it creates translation output.
+
+In Attention case there are few differences that I will adress here.
 
 ### Input Preprocessing
 
@@ -158,7 +206,7 @@ It's done by adding `<start>` or `<end>` token respectively.
 
 subroutines can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/utilities/utils.py)
 
-whole preprocess routine can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/Seq2Seq/Seq2Seq.py) plus code is pasted below:
+whole preprocess routine can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/Seq2SeqAttention/main.py) plus code is pasted below:
 
 ```python
     en_lines = [normalize(line) for line in en_lines]
@@ -253,7 +301,8 @@ Because we`re using ditributed training we have to take average loss. we can do 
 
 but tensorflow 2.0 has build in method to do this
 
-3. **Distributed train/test steps**
+#TODO: CHANGE TO ATTENTION
+3. **Distributed train/test steps**  
 
 Train and test step are almost the same so I`ll get into train step and point different in test step
 Because we`re creating custom training loop there are two things we can use to speed up computations:
@@ -389,18 +438,10 @@ Every eopch take proper batches and train/test. Additionally accuracy + losses a
 
 One more thing that's going on here is saving model/optimizer value each x interations. It's done with `tf.train.Checkpoint`. For details please see [tensorflow site](https://www.tensorflow.org/guide/checkpoint)
 
-Whole training process code can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/Seq2Seq/Seq2SeqTrainer.py)
+Whole training process code can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/Seq2SeqAttention/Seq2SeqAttentionTrainer.py)
 
 7. **Results**
 
 Accuracy plot:
 
-![Accuracy plot](../imgs/Seq2Seq/accuracy_plot.png)
-
-Accuracy seems similiar between training and testing sets
-
 Loss plot:
-
-![Loss plot](../imgs/Seq2Seq/losses_plot.png)
-
-We can see that during 20 epochs model starts to flatten it`s loss chart.

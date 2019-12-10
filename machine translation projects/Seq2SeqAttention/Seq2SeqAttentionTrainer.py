@@ -16,6 +16,34 @@ class Seq2SeqAttentionTrainer:
         self.fr_tokenizer = None
         self.en_tokenizer = None
 
+    def predict_output(en_sentence, fr_sentence):
+        real_en_sentence =' '.join([self.en_tokenizer.index_word[i] for i in en_sentence if i not in [0]]) 
+        fr_sentence = ' '.join([self.fr_tokenizer.index_word[i] for i in fr_sentence if i not in [0]]) 
+        en_sentence = tf.expand_dims(en_sentence, 0)
+        initial_states = self.encoder.init_states(1)
+        encoder_out, state_h, state_c = self.encoder(tf.constant(en_sentence), initial_states, training=False)
+
+        decoder_in = tf.constant([[self.fr_tokenizer.word_index['<start>']]])
+        sentence = []
+        while True:
+            decoder_out, state_h, state_c = self.decoder( \
+                            decoder_in, (state_h, state_c), encoder_out, training=False)
+            # argmax to get max index 
+            decoder_in = tf.expand_dims(tf.argmax(decoder_out, -1), 0)
+            word = self.fr_tokenizer.index_word[decoder_in.numpy()[0][0]]
+
+            if  word == '<end>':
+                break
+            sentence.append(word)
+
+        predicted_sentence = ' '.join(sentence)
+        
+        print("----------------------------PREDICTION----------------------------")
+        print("       En sentence {} " .format(real_en_sentence))
+        print("       Predicted:  {} " .format(predicted_sentence))
+        print("       Should be:  {} " .format(fr_sentence))
+        print("--------------------------END PREDICTION--------------------------")
+
     def train(self, train_dataset_data, test_dataset_data, tokenizers, epochs, attention_type, restore_checkpoint=True):
         """
             train_dataset_data should be made from (en_train, fr_train_in, fr_train_out)
@@ -62,7 +90,7 @@ class Seq2SeqAttentionTrainer:
                                        optimizer=self.optimizer,
                                        epoch=tf.Variable(1))
 
-            manager = tf.train.CheckpointManager(ckpt, "./checkpoints/train", max_to_keep=5)
+            manager = tf.train.CheckpointManager(ckpt, "./checkpoints/Seq2SeqAttention", max_to_keep=5)
 
             
             if manager.latest_checkpoint and restore_checkpoint:
@@ -70,34 +98,6 @@ class Seq2SeqAttentionTrainer:
                 print ('Latest checkpoint restored!!')
             else:
                 print("training from scratch")
-
-            def predict_output(en_sentence, fr_sentence):
-                real_en_sentence =' '.join([self.en_tokenizer.index_word[i] for i in en_sentence if i not in [0]]) 
-                fr_sentence = ' '.join([self.fr_tokenizer.index_word[i] for i in fr_sentence if i not in [0]]) 
-                en_sentence = tf.expand_dims(en_sentence, 0)
-                initial_states = self.encoder.init_states(1)
-                encoder_out, state_h, state_c = self.encoder(tf.constant(en_sentence), initial_states, training=False)
-
-                decoder_in = tf.constant([[self.fr_tokenizer.word_index['<start>']]])
-                sentence = []
-                while True:
-                    decoder_out, state_h, state_c = self.decoder( \
-                                 decoder_in, (state_h, state_c), encoder_out, training=False)
-                    # argmax to get max index 
-                    decoder_in = tf.expand_dims(tf.argmax(decoder_out, -1), 0)
-                    word = self.fr_tokenizer.index_word[decoder_in.numpy()[0][0]]
-
-                    if  word == '<end>':
-                        break
-                    sentence.append(word)
-
-                predicted_sentence = ' '.join(sentence)
-                
-                print("----------------------------PREDICTION----------------------------")
-                print("       En sentence {} " .format(real_en_sentence))
-                print("       Predicted:  {} " .format(predicted_sentence))
-                print("       Should be:  {} " .format(fr_sentence))
-                print("--------------------------END PREDICTION--------------------------")
 
             loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(
                         from_logits=True, reduction="none")
@@ -201,7 +201,7 @@ class Seq2SeqAttentionTrainer:
                     print("Saving checkpoint for epoch {}: {}".format(epoch, save_path))
                 if epoch % self.predict_every == 0:         
                     idx = np.random.randint(low=0, high=len(en_test), size=1)[0]
-                    predict_output(en_test[idx], fr_test_out[idx])
+                    self.predict_output(en_test[idx], fr_test_out[idx])
             save_path = manager.save()
             print ('Saving checkpoint for end at {}'.format(save_path))
 

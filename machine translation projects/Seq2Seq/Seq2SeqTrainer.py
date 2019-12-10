@@ -90,7 +90,7 @@ class Seq2SeqTrainer:
                                        optimizer=self.optimizer,
                                        epoch=tf.Variable(1))
 
-            manager = tf.train.CheckpointManager(ckpt, "./checkpoints/train", max_to_keep=5)
+            manager = tf.train.CheckpointManager(ckpt, "./checkpoints/Seq2Seq", max_to_keep=5)
 
             
             if manager.latest_checkpoint and restore_checkpoint:
