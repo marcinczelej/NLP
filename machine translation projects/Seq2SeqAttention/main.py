@@ -22,7 +22,14 @@ def main(args):
     accuracy = [], []
    
     data_dir = "../data"
-    en_lines, fr_lines = read_data_files(data_dir, ("small_vocab_en", "small_vocab_fr"))
+    # en_lines, fr_lines = read_data_files(data_dir, ("small_vocab_en", "small_vocab_fr"))
+    
+    data = read_data(os.path.join(data_dir, "fra-eng"), "fra.txt")
+    en_lines, fr_lines = list(zip(*data))
+    
+    en_lines = en_lines[:40000]
+    fr_lines = fr_lines[:40000]
+
     print("Data reading: Done")
     
     en_lines = [normalize(line) for line in en_lines]
@@ -51,9 +58,9 @@ def main(args):
     print("en_vocab {}\nfr_vocab {}" .format(en_vocab_size, fr_vocab_size))
 
     trainer = Seq2SeqAttentionTrainer(params.BATCH_SIZE, params.LSTM_SIZE, params.EMBEDDING_SIZE, 1)
-        print("Starting distributed training loop with:\n  epochs {}\n  batch_szie {}\n  lstm_units {}\n  embedding_size {}\n  attention score {}"\
+    print("Starting distributed training loop with:\n  epochs {}\n  batch_szie {}\n  lstm_units {}\n  embedding_size {}\n  attention score {}"\
                 .format(params.EPOCHS, params.BATCH_SIZE, params.LSTM_SIZE, params.EMBEDDING_SIZE, args.attention_type))
-        losses, accuracy = trainer.train([en_train, fr_train_in, fr_train_out], [en_test, fr_test_in, fr_test_out], [en_tokenizer, fr_tokenizer], params.EPOCHS, args.attention_type)
+    losses, accuracy = trainer.train([en_train, fr_train_in, fr_train_out], [en_test, fr_test_in, fr_test_out], [en_tokenizer, fr_tokenizer], params.EPOCHS, args.attention_type)
      
     train_losses, test_losses = losses
     train_accuracyVec, test_accuracyVec = accuracy

@@ -25,12 +25,15 @@ class Seq2SeqAttentionTrainer:
 
         decoder_in = tf.constant([[self.fr_tokenizer.word_index['<start>']]])
         sentence = []
+        alignments = []
         while True:
-            decoder_out, state_h, state_c = self.decoder( \
+            decoder_out, state_h, state_c, alignment = self.decoder( \
                             decoder_in, (state_h, state_c), encoder_out, training=False)
             # argmax to get max index 
             decoder_in = tf.expand_dims(tf.argmax(decoder_out, -1), 0)
             word = self.fr_tokenizer.index_word[decoder_in.numpy()[0][0]]
+
+            alignments.append(alignment)
 
             if  word == '<end>':
                 break
@@ -43,12 +46,16 @@ class Seq2SeqAttentionTrainer:
         print("       Predicted:  {} " .format(predicted_sentence))
         print("       Should be:  {} " .format(fr_sentence))
         print("--------------------------END PREDICTION--------------------------")
+        
+        return np.array(alignments), real_en_sentence.split(' '), predicted_sentence.split(' ')
 
     def train(self, train_dataset_data, test_dataset_data, tokenizers, epochs, attention_type, restore_checkpoint=True):
         """
             train_dataset_data should be made from (en_train, fr_train_in, fr_train_out)
             test_dataset_data should be made from (en_test, fr_test_in, fr_test_out)
         """
+        
+        print_heatmap=True
         
         self.en_tokenizer, self.fr_tokenizer = tokenizers
         en_vocab_size = len(self.en_tokenizer.word_index)+1
@@ -79,6 +86,11 @@ class Seq2SeqAttentionTrainer:
         test_accuracy = tf.keras.metrics.Mean()
         train_accuracy = tf.keras.metrics.Mean()
         one_step_test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
+
+        prediction_idx = np.random.randint(low=0, high=len(en_test), size=1)[0]
+        prediction_en, prediction_fr = en_test[prediction_idx], fr_test_out[prediction_idx]
+
+        alignments = []
 
         with self.strategy.scope():
             self.encoder = Encoder(self.lstm_size, self.embedding_size, en_vocab_size)
@@ -200,8 +212,17 @@ class Seq2SeqAttentionTrainer:
                     save_path = manager.save()
                     print("Saving checkpoint for epoch {}: {}".format(epoch, save_path))
                 if epoch % self.predict_every == 0:         
-                    idx = np.random.randint(low=0, high=len(en_test), size=1)[0]
-                    self.predict(en_test[idx], fr_test_out[idx])
+                    alignment, source, predicted = self.predict(prediction_en, prediction_fr)
+                    alignments.append(np.squeeze(alignments, (1, 2)))
+                    if print_heatmap:
+                        fig = plt.figure(figsize=(10, 10))
+                        ax = fig.add_subplot(1, 1, 1)
+                        ax.matshow(attention, cmap='jet')
+                        ax.set_xticklabels([''] + source, rotation=90)
+                        ax.set_yticklabels([''] + predicted)
+
+                        plt.savefig('heatmap/test_{}.png' .format(epoch//self.predict_every))
+                        plt.close()
             save_path = manager.save()
             print ('Saving checkpoint for end at {}'.format(save_path))
 

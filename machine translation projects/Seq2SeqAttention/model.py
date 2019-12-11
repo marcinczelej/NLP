@@ -97,4 +97,4 @@ class Decoder(tf.keras.Model):
     # conversion to vocabulaty prob
     # output_vector shape [batch_size, vocab_size]
     output_vector = self.W_s(output_vector)
-    return output_vector, state_h, state_c
+    return output_vector, state_h, state_c, alignment

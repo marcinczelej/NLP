@@ -18,9 +18,9 @@ Seq2Seq model is encoder-decoder machine learning algorithm that can be used in
 That was described in : [Sequence to Sequence Learning with Neural Networks](https://arxiv.org/pdf/1409.3215.pdf) paper, where math and detailed explanation can be found.
 
 In this case it is used for machine translation.
-As name suggests it's made from two parts/blocks as can be seen on diagram below: Encoder and Decoder. Decoder is often called language model. Additionally (from what  I figured out) its better not to dd anything to encoder input sentence ( no tags ) and only add `<start>` tag at the beginning of decoder input sentence and `<end>` tag at the end of decoder output sentence.
+As name suggests it's made from two blocks: Encoder and Decoder, often called language model. Additionally (from what  I figured out) its better not to dd anything to encoder input sentence ( no tags ) and only add `<start>` tag at the beginning of decoder input sentence and `<end>` tag at the end of decoder output sentence.
 
-Main idea is that Encoder encodes input sentence and return fixed length context vector, that contains embedding information that encoded managed to get. In practice context vector is last hidden state of encoder block and it`s barely good summary of input sentence, it carries meaning of sentence, without any specific details about each word. This kind of information is then passed into decoder block as its input hidden state. 
+Main idea is that Encoder encodes input sentence and return fixed length context vector, that contains embedding information that encoded managed to get. In practice context vector is last hidden state of encoder block and it`s barely good summary of input sentence, as it carries meaning of sentence, without any specific details about each word. This kind of information is then passed into decoder block as its input hidden state.
 
 ![Seq2Seq overview](https://smerity.com/media/images/articles/2016/gnmt_arch_1_enc_dec.svg)
 [Source](https://smerity.com/articles/2016/google_nmt_arch.html)
@@ -40,9 +40,9 @@ link to Colab notebook can be found [here](https://github.com/mizzmir/NLP/blob/m
 
 ### Encoder
 
-Encoder part is straightforward and is build from Embedding layer  + LSTM layers that returns hidden states/ last state. Those info are then passed to decoder as input, with decoder Desired translation input. As for encoder input, we get hidden states + input sequence we want to encode.
+Encoder part is straightforward and is build from two layers: Embedding layer  + LSTM layer, that returns hidden states/last LSTM state. As for encoder input, we get hidden states + input sequence we want to encode.
 
-Let first focus on structure of encoder, on what we need and what shapes w will have during each step of encoding process (generally for me, writing shapes can help to understand what`s going on inside and check if implementation is good or not)
+Let first focus on structure of encoder, on what we need and what shapes are during each step of encoding process.
 
 ![Seq2Seq Encoder shapes](../imgs/Seq2Seq/Encoder_shapes.jpg)
 
@@ -75,13 +75,13 @@ class Encoder(tf.keras.Model):
                 tf.zeros([batch_size, self.units]))
 ```
 
-Because we have to get initial hidden states for encoder, that are all zeros at the start of every training step, there is method init_states(...) added. It returns properly shaped hidden states. In case of using GRU layer, there will lbe only one hidden state , instead of two.
+Because we need initial hidden states for encoder, there is method init_states(...) added. It returns properly shaped hidden states. In case of using GRU layer, there will lbe only one hidden state , instead of two.
 
 ### Decoder
 
-Decoder part is also straightforward and build from Embedding layer + LSTM layer + Dense layer.
-As input Decoder gets hidden states from encoder output + desired sequence starting with <start> tag.
-Again it`s good to visualize input shapes before diving into coding.
+Decoder part is also straightforward and build from three layers: Embedding layer + LSTM layer + Dense layer.
+As input Decoder gets hidden states from encoder output + desired sequence starting with `<start>` tag.
+Again it`s good to visualize input shapes before diving into code.
 
 ![Seq2Seq Decoder shapes](../imgs/Seq2Seq/Decoder_shapes.jpg)
 
@@ -113,11 +113,11 @@ Both encoder and decoder code plus small shapes test can be found [here](https:/
 
 ### Input Preprocessing
 
-Preprocessing is  process that has to be done so we can push data into our model. It consists of few parts:
+Preprocessing is  process that has to be done before we can feed data into our model. It consists of few parts:
 
 - **data normalization**
 
-    In this step we're assuring that all sentences are in ascii format, cleaning unwanted tokens, spaces before punctuations, changing to lowercase etc. Mostly contains general cleanup of text. It`s common to use two below methods (usually it's enough but you may want to add something extra for example leave some language specific characters or to leave some tokens)
+    This step assures that all sentences are in ascii format, clean unwanted tokens, spaces before punctuations, changes to lowercase etc. Mostly contains general cleanup of text. It`s common to use two below methods (usually it's enough but you may want to add something extra for example leave some language specific characters or to leave some tokens)
 
     ```python
     def unicode_to_ascii(s):
@@ -133,19 +133,21 @@ Preprocessing is  process that has to be done so we can push data into our model
         return s
     ```
 
-- **splitting data into train/test set and expanding desired decoder intput/output sequences**
-It's done by adding `<start>` or `<end>` token respectively.
+- **splitting data into train/test set and expanding desired decoder input/output sequences**
+
+    It's done by adding `<start>` or `<end>` token respectively to train/test data.
 
 - **padding and tokenization**
+
     Sentences are zero padded, so they will be same length, and tokenized into vectors of tokens (integers) with proper Tokenizer.
-    In this case build in tensorflow tokenizer wa used, but one can use nltk tokenizer, scipy tokenizer etc..
+    In this case build in tensorflow tokenizer is use, but one can use nltk tokenizer, scipy tokenizer etc..
     We have to save both input and output language tokenizers to de-tokenize sentences later in prediction phase.
 
     ```python
     def preprocessSeq(texts, tokenizer):
-    texts = tokenizer.texts_to_sequences(texts)
+        texts = tokenizer.texts_to_sequences(texts)
 
-    return pad_sequences(texts, padding='post')
+        return pad_sequences(texts, padding='post')
 
     def tokenizeInput(input_data, tokenizer):
         output_data = []
@@ -158,11 +160,11 @@ It's done by adding `<start>` or `<end>` token respectively.
         return output_data
     ```
 
-subroutines can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/utilities/utils.py)
+    subroutines can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/utilities/utils.py)
 
-whole preprocess routine can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/Seq2Seq/Seq2Seq.py) plus code is pasted below:
+    whole preprocess routine can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/Seq2Seq/Seq2Seq.py) plus code is pasted below:
 
-```python
+    ```python
     en_lines = [normalize(line) for line in en_lines]
     fr_lines = [normalize(line) for line in fr_lines]
 
@@ -179,50 +181,50 @@ whole preprocess routine can be found [here](https://github.com/mizzmir/NLP/blob
 
     input_data = [fr_train_in, fr_train_out, fr_test_in, fr_test_out, fr_test, fr_train]
     fr_train_in, fr_train_out, fr_test_in, fr_test_out, fr_test, fr_train = tokenizeInput(input_data,
-                                                                                          fr_tokenizer)
+                                                                                        fr_tokenizer)
 
     input_data = [en_train, en_test]
     en_train, en_test = tokenizeInput(input_data, en_tokenizer)
-```
+    ```
 
 ### training loop
 
-Now lets talk about training loop. In order to make use of multiple gpus, few things has to be done. Custom training loop using multiple GPUs in tensorflow 2.0 is nicely described [here](https://www.tensorflow.org/tutorials/distribute/custom_training)
+Now lets talk about training loop. In order to make use of multiple GPUs, few things has to be done. Custom training loop using multiple GPUs in tensorflow 2.0 is nicely described [here](https://www.tensorflow.org/tutorials/distribute/custom_training)
 
-In order to use multiple GPU-s we have to create `MirroredStrategy` and then do whole training under its scope. Additionally we cannot use normal `tf.Datasets`, because we want to "distribute it over multiple models on different GPUs. To do this we have to do two things:
+In order to use multiple GPUs we have to create `MirroredStrategy` and then do whole training under its scope. Additionally we cannot use normal `tf.Datasets`, because we want to "distribute it over multiple models on different GPUs. To do this we have to do two things:
 
 1. set desired **BATCH_SIZE** for all models
-2. use `strategy.experimental_distribute_dataset` 
+2. use `strategy.experimental_distribute_dataset`
 
-As for first, we have to multiply desired **BATCH_SIZE** that we want to pass to single model, with number of GPUs we want to use. We can do this by simple `BATCH_SIZE * GUP_number` multiplication to use fixed number of GPUs, or use `strategy.num_replicas_in_sync` that will give us all available GPUs.
+As for first, we have to multiply desired **BATCH_SIZE** we want to pass to single model, with number of GPUs we want to use. We can do this by simple `BATCH_SIZE * GUP_number` multiplication to use fixed number of GPUs, or use `strategy.num_replicas_in_sync` that will give us all available GPUs.
 
 ```python
-    print ('Number of devices: {}'.format(self.strategy.num_replicas_in_sync))
-    GLOBAL_BATCH_SIZE = self.batch_size*self.strategy.num_replicas_in_sync
+print ('Number of devices: {}'.format(self.strategy.num_replicas_in_sync))
+GLOBAL_BATCH_SIZE = self.batch_size*self.strategy.num_replicas_in_sync
 ```
 
 Where:
     `self.strategy = tf.distribute.MirroredStrategy()`
 
-After this , during ach training step **GLOBAL_BACH_SIZE** samples wil be taken from dataset and distributed among all models, so we each model will get **BATCH_SIZE** batches that we want.
+After this, during each training step **GLOBAL_BACH_SIZE** samples wil be taken from dataset and distributed among all models, so we each model will get **BATCH_SIZE** batch size of data.
 
 Now when we have out desired **GLOBAL_BATCH_SIZE** let's create train/test datasets. Because we`re using distributed training our desired batch_size will be **GLOBAL_BATCH_SIZE**.
 
 ```python
-        train_dataset = tf.data.Dataset.from_tensor_slices((en_train, fr_train_in, fr_train_out))
-        train_dataset = train_dataset.shuffle(len(en_train), reshuffle_each_iteration=True)\
-                                        .batch(GLOBAL_BATCH_SIZE, drop_remainder=True)
-        train_dataset_distr = self.strategy.experimental_distribute_dataset(train_dataset)
+train_dataset = tf.data.Dataset.from_tensor_slices((en_train, fr_train_in, fr_train_out))
+train_dataset = train_dataset.shuffle(len(en_train), reshuffle_each_iteration=True)\
+                                .batch(GLOBAL_BATCH_SIZE, drop_remainder=True)
+train_dataset_distr = self.strategy.experimental_distribute_dataset(train_dataset)
 
-        test_dataset = tf.data.Dataset.from_tensor_slices((en_test, fr_test_in, fr_test_out))
-        test_dataset = test_dataset.shuffle(len(en_test), reshuffle_each_iteration=True)\
-                                       .batch(GLOBAL_BATCH_SIZE, drop_remainder=True)
-        test_dataset_distr = self.strategy.experimental_distribute_dataset(test_dataset)
+test_dataset = tf.data.Dataset.from_tensor_slices((en_test, fr_test_in, fr_test_out))
+test_dataset = test_dataset.shuffle(len(en_test), reshuffle_each_iteration=True)\
+                                .batch(GLOBAL_BATCH_SIZE, drop_remainder=True)
+test_dataset_distr = self.strategy.experimental_distribute_dataset(test_dataset)
 ```
 
-Only different thing , from non-distributed datasets are last lines for both test/train datasets
+Only different thing, from non-distributed datasets are  in last lines for both test/train datasets
 
-From this point everything we'll do, will be done under the score of strategy.MirroredStrategy().
+From this point everything we'll do, will be done under the score of `tf.strategy.MirroredStrategy()`.
 
 1. **We have to create Encoder/Decoder/Optimizer under strategy scope:**
 
@@ -237,30 +239,30 @@ From this point everything we'll do, will be done under the score of strategy.Mi
 The next thing to do is to define a loss function. Because sequence is padded with zeros, we cannot take it into account when calculating loss. This will be handled with proper mask:
 
 ```python
-            loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, 
-                                                                     reduction="none") 
-            def compute_loss(predictions, labels):
-                mask = tf.math.logical_not(tf.math.equal(labels, 0))
-                mask = tf.cast(mask, tf.int64)
-                per_example_loss = loss_obj(labels, predictions, sample_weight=mask)
-                return tf.nn.compute_average_loss(per_example_loss, global_batch_size=GLOBAL_BATCH_SIZE)
+loss_obj = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, 
+                                                            reduction="none") 
+def compute_loss(predictions, labels):
+    mask = tf.math.logical_not(tf.math.equal(labels, 0))
+    mask = tf.cast(mask, tf.int64)
+    per_example_loss = loss_obj(labels, predictions, sample_weight=mask)
+    return tf.nn.compute_average_loss(per_example_loss, global_batch_size=GLOBAL_BATCH_SIZE)
 ```
 
-We're using `from_logit=True` because decoder output is not after softmax activation, so we're not passing probabilities, just values.
+We're using `from_logits=True` because decoder output is not after softmax activation, so we're not passing probabilities, just values.
 mask is used to zero padded values and is passed to loss obj with `sample_weight` parameter. Same result can be obtained by multiplying predicted data by mask and then passing result to `loss_obj`
 
 Because we`re using distributed training we have to take average loss. we can do the same thing by hand  with simple math:
 
 `output_loss = tf.reduce_sum(per_example_loss)*1./GLOBAL_BATCH_SIZE`
 
-but tensorflow 2.0 has build in method to do this
+but tensorflow 2.0 has build in method to do this : `tf.nn.compute_average_loss(...)`
 
 3. **Distributed train/test steps**
 
 Train and test step are almost the same so I`ll get into train step and point different in test step
 Because we`re creating custom training loop there are two things we can use to speed up computations:
 
-- use `@tf.function` to use static graph computation. We have to use it only in one method, because every method called inside it will automatically using it. Additionally it will speed up calculations, due to optimalization tensorflow makes when it uses it.  **to debug code please remove it, use tf.print(...) not normal python print(...)**
+- use `@tf.function` to use static graph computation. We have to use it only in one method, because every method called from it will automatically using it. Additionally it will speed up calculations, due to optimization tensorflow makes when it uses it.  **to debug code please remove it, use tf.print(...) not normal python print(...)**
 - training step uses `tf.GradientTape()` to keep track of gradients and allow backpropagation.
 
 train_step(...) method makes one forward pass of training + applies gradients.
@@ -271,89 +273,90 @@ distributed_train_step(...) makes distributional part happens:
 - then `tf.strategy.MirroredStrategy.reduce(tf.distribute.ReduceOp.SUM, ...)` to take sum of losses and calcualte output loss from whole distributed models
 
 ```python
-            # one training step
-            def train_step(encoder_input, decoder_in, decoder_out, initial_states):
-                with tf.GradientTape() as tape:
-                    encoder_states = self.encoder(encoder_input, initial_state, training=True)
-                    predicted_data, _, _ = self.decoder(decoder_in, encoder_states[1:], training=True)
-                    loss = compute_loss(predicted_data, decoder_out)
+# one training step
+def train_step(encoder_input, decoder_in, decoder_out, initial_states):
+    with tf.GradientTape() as tape:
+        encoder_states = self.encoder(encoder_input, initial_state, training=True)
+        predicted_data, _, _ = self.decoder(decoder_in, encoder_states[1:], training=True)
+        loss = compute_loss(predicted_data, decoder_out)
 
-                trainable = self.encoder.trainable_variables + self.decoder.trainable_variables
-                grads = tape.gradient(loss, trainable)
-                self.optimizer.apply_gradients(zip(grads, trainable))
-                train_accuracy.update_state(decoder_out, predicted_data)
-                return loss
+    trainable = self.encoder.trainable_variables + self.decoder.trainable_variables
+    grads = tape.gradient(loss, trainable)
+    self.optimizer.apply_gradients(zip(grads, trainable))
+    train_accuracy.update_state(decoder_out, predicted_data)
+    return loss
 
-            @tf.function
-            def distributed_train_step(encoder_input, decoder_in, decoder_out, initial_states):
-                per_replica_losses = self.strategy.experimental_run_v2(train_step,
-                                                              args=(encoder_input,
-                                                                    decoder_in,
-                                                                    decoder_out,
-                                                                    initial_states,))
-                return self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses,
-                                   axis=None)
+@tf.function
+def distributed_train_step(encoder_input, decoder_in, decoder_out, initial_states):
+    per_replica_losses = self.strategy.experimental_run_v2(train_step,
+                                                    args=(encoder_input,
+                                                        decoder_in,
+                                                        decoder_out,
+                                                        initial_states,))
+    return self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses,
+                        axis=None)
 ```
 
 Test_step differences:
 
-- there is no `tf.GradientTape` + bakcpropagation step
+- there is no `tf.GradientTape` + backpropagation step
 - `training=False` for encoder/decoder object
 
 ```python
-            def test_step(encoder_input, decoder_in, decoder_out):
-                initial_state = self.encoder.init_states(self.batch_size)
-                encoder_states = self.encoder(encoder_input, initial_state, training=False)
-                predicted_data, _, _ = self.decoder(decoder_in, encoder_states[1:], training=False)
-                loss = compute_loss(predicted_data, decoder_out)
+def test_step(encoder_input, decoder_in, decoder_out):
+    initial_state = self.encoder.init_states(self.batch_size)
+    encoder_states = self.encoder(encoder_input, initial_state, training=False)
+    predicted_data, _, _ = self.decoder(decoder_in, encoder_states[1:], training=False)
+    loss = compute_loss(predicted_data, decoder_out)
 
-                test_accuracy.update_state(decoder_out, predicted_data)
-                return loss
+    test_accuracy.update_state(decoder_out, predicted_data)
+    return loss
 
-            @tf.function
-            def distributed_test_step(encoder_input, decoder_in, decoder_out):
-                per_replica_losses = self.strategy.experimental_run_v2(test_step,
-                                                              args=(encoder_input,
-                                                                    decoder_in,
-                                                                    decoder_out,))
-                return self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses,
-                                   axis=None)
+@tf.function
+def distributed_test_step(encoder_input, decoder_in, decoder_out):
+    per_replica_losses = self.strategy.experimental_run_v2(test_step,
+                                                    args=(encoder_input,
+                                                        decoder_in,
+                                                        decoder_out,))
+    return self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses,
+                        axis=None)
 ```
 
 4. **Prediction step**
 
-It`s forward pass but feeded with <start> token at the beginning.
-Next steps are basically:
+Basically what`s going on here is following:
 
-- take decoder output
-- if it's `<end>` token break prediction loop
-- else feed output of decoder last step as decoder input and repeat 
+- Encoding of input sentence with encoder
+- Decoder gets `<start>` symbol + encoder last hidden states as input
+- Decoder predicts next symbol in output sequence + returns new hidden states
+- Predicted symbol is passed as new decoder input along with previously returned hidden states
+- This process is repeated until `<end>` token is predicted or max length is reached
 
 ```python
-            def predict(input_data, real_data_out):
-                en_sentence = self.en_tokenizer.sequences_to_texts([input_data])
-                input_data = tf.expand_dims(input_data, 0)
-                initial_states = self.encoder.init_states(1)
-                _, state_h, state_c = self.encoder(tf.constant(input_data), initial_states, training=False)
+def predict(input_data, real_data_out):
+    en_sentence = self.en_tokenizer.sequences_to_texts([input_data])
+    input_data = tf.expand_dims(input_data, 0)
+    initial_states = self.encoder.init_states(1)
+    _, state_h, state_c = self.encoder(tf.constant(input_data), initial_states, training=False)
 
-                symbol = tf.constant([[self.fr_tokenizer.word_index['<start>']]])
-                sentence = []
+    symbol = tf.constant([[self.fr_tokenizer.word_index['<start>']]])
+    sentence = []
 
-                while True:
-                    symbol, state_h, state_c = self.decoder(symbol, (state_h, state_c), training=False)
-                    # argmax to get max index 
-                    symbol = tf.argmax(symbol, axis=-1)
-                    word = self.fr_tokenizer.index_word[symbol.numpy()[0][0]]
+    while True:
+        symbol, state_h, state_c = self.decoder(symbol, (state_h, state_c), training=False)
+        # argmax to get max index 
+        symbol = tf.argmax(symbol, axis=-1)
+        word = self.fr_tokenizer.index_word[symbol.numpy()[0][0]]
 
-                    if word == '<end>' or len(sentence) >= len(real_data_out):
-                        break
+        if word == '<end>' or len(sentence) >= len(real_data_out):
+            break
 
-                    sentence.append(word)
-                print("--------------PREDICTION--------------")
-                print("  English   :  {}" .format(en_sentence))
-                print("  Predicted :  {}" .format(' '.join(sentence)))
-                print("  Correct   :  {}" .format(self.fr_tokenizer.sequences_to_texts([real_data_out])))
-                print("------------END PREDICTION------------")
+        sentence.append(word)
+    print("--------------PREDICTION--------------")
+    print("  English   :  {}" .format(en_sentence))
+    print("  Predicted :  {}" .format(' '.join(sentence)))
+    print("  Correct   :  {}" .format(self.fr_tokenizer.sequences_to_texts([real_data_out])))
+    print("------------END PREDICTION------------")
 ```
 
 5. **Main loop**
@@ -361,30 +364,30 @@ Next steps are basically:
 During every epoch we train/test our models on split datasets. Train/test accuracy and losses are printed each `N` iterations and losses/accuracy values are added to proper lists, so we can plot them after.
 
 ```python
-           for epoch in range(epochs):
-                test_accuracy.reset_states()
-                train_accuracy.reset_states()
-                initial_state = self.encoder.init_states(self.batch_size)
-                total_loss = 0.0
-                num_batches = 0
-                for _, (en_data, fr_data_in, fr_data_out) in enumerate(train_dataset_distr):
-                    loss = distributed_train_step(en_data, fr_data_in, fr_data_out, initial_state)
-                    total_loss += loss
-                    num_batches += 1
-                train_losses.append(total_loss/num_batches)
-                total_loss = 0.0
-                num_batches = 0
-                for _, (en_data, fr_data_in, fr_data_out) in enumerate(test_dataset_distr):
-                    loss = distributed_test_step(en_data, fr_data_in, fr_data_out)
-                    total_loss += loss
-                    num_batches += 1
-                test_losses.append(total_loss/num_batches)
-                print ('Epoch {} training Loss {:.4f} Accuracy {:.4f}  test Loss {:.4f} Accuracy {:.4f}' .format(
-                                                      epoch + 1, 
-                                                      train_losses[-1], 
-                                                      train_accuracy.result(),
-                                                      test_losses[-1],
-                                                      test_accuracy.result()))
+for epoch in range(epochs):
+    test_accuracy.reset_states()
+    train_accuracy.reset_states()
+    initial_state = self.encoder.init_states(self.batch_size)
+    total_loss = 0.0
+    num_batches = 0
+    for _, (en_data, fr_data_in, fr_data_out) in enumerate(train_dataset_distr):
+        loss = distributed_train_step(en_data, fr_data_in, fr_data_out, initial_state)
+        total_loss += loss
+        num_batches += 1
+    train_losses.append(total_loss/num_batches)
+    total_loss = 0.0
+    num_batches = 0
+    for _, (en_data, fr_data_in, fr_data_out) in enumerate(test_dataset_distr):
+        loss = distributed_test_step(en_data, fr_data_in, fr_data_out)
+        total_loss += loss
+        num_batches += 1
+    test_losses.append(total_loss/num_batches)
+    print ('Epoch {} training Loss {:.4f} Accuracy {:.4f}  test Loss {:.4f} Accuracy {:.4f}' .format(
+                                            epoch + 1, 
+                                            train_losses[-1], 
+                                            train_accuracy.result(),
+                                            test_losses[-1],
+                                            test_accuracy.result()))
 ```
 
 1. **Saving checkpoint**
@@ -399,7 +402,7 @@ Accuracy plot:
 
 ![Accuracy plot](../imgs/Seq2Seq/accuracy_plot.png)
 
-Accuracy seems similiar between training and testing sets
+Accuracy seems similar between training and testing sets
 
 Loss plot:
 
