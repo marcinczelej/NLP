@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import tensorflow as tf
 
@@ -16,19 +17,17 @@ class Seq2SeqAttentionTrainer:
         self.fr_tokenizer = None
         self.en_tokenizer = None
 
-    def predict(en_sentence, fr_sentence):
-        real_en_sentence =' '.join([self.en_tokenizer.index_word[i] for i in en_sentence if i not in [0]]) 
-        fr_sentence = ' '.join([self.fr_tokenizer.index_word[i] for i in fr_sentence if i not in [0]]) 
-        en_sentence = tf.expand_dims(en_sentence, 0)
+    def predict(self, en_sentence, fr_sentence, print_prediction):
+        tokenized_en_sentence = self.en_tokenizer.texts_to_sequences([en_sentence])
         initial_states = self.encoder.init_states(1)
-        encoder_out, state_h, state_c = self.encoder(tf.constant(en_sentence), initial_states, training=False)
+        encoder_out, state_h, state_c = self.encoder(tf.constant(tokenized_en_sentence), initial_states, training_mode=False)
 
         decoder_in = tf.constant([[self.fr_tokenizer.word_index['<start>']]])
         sentence = []
         alignments = []
         while True:
             decoder_out, state_h, state_c, alignment = self.decoder( \
-                            decoder_in, (state_h, state_c), encoder_out, training=False)
+                            decoder_in, (state_h, state_c), encoder_out, training_mode=False)
             # argmax to get max index 
             decoder_in = tf.expand_dims(tf.argmax(decoder_out, -1), 0)
             word = self.fr_tokenizer.index_word[decoder_in.numpy()[0][0]]
@@ -41,15 +40,16 @@ class Seq2SeqAttentionTrainer:
 
         predicted_sentence = ' '.join(sentence)
         
-        print("----------------------------PREDICTION----------------------------")
-        print("       En sentence {} " .format(real_en_sentence))
-        print("       Predicted:  {} " .format(predicted_sentence))
-        print("       Should be:  {} " .format(fr_sentence))
-        print("--------------------------END PREDICTION--------------------------")
+        if print_prediction:
+            print("----------------------------PREDICTION----------------------------")
+            print("       En sentence {} " .format(en_sentence))
+            print("       Predicted:  {} " .format(predicted_sentence))
+            print("       Should be:  {} " .format(fr_sentence))
+            print("--------------------------END PREDICTION--------------------------")
         
-        return np.array(alignments), real_en_sentence.split(' '), predicted_sentence.split(' ')
+        return np.array(alignments), en_sentence.split(' '), predicted_sentence.split(' ')
 
-    def train(self, train_dataset_data, test_dataset_data, tokenizers, epochs, attention_type, restore_checkpoint=True):
+    def train(self, train_dataset_data, test_dataset_data, prediction_data, tokenizers, epochs, attention_type, restore_checkpoint=True):
         """
             train_dataset_data should be made from (en_train, fr_train_in, fr_train_out)
             test_dataset_data should be made from (en_test, fr_test_in, fr_test_out)
@@ -57,6 +57,7 @@ class Seq2SeqAttentionTrainer:
         
         print_heatmap=True
         
+        en_predict, fr_predict = prediction_data
         self.en_tokenizer, self.fr_tokenizer = tokenizers
         en_vocab_size = len(self.en_tokenizer.word_index)+1
         fr_vocab_size = len(self.fr_tokenizer.word_index)+1
@@ -73,7 +74,7 @@ class Seq2SeqAttentionTrainer:
                                         .batch(GLOBAL_BATCH_SIZE, drop_remainder=True)
         train_dist_dataset = self.strategy.experimental_distribute_dataset(train_dataset)
 
-        test_dataset = tf.data.Dataset.from_tensor_slices((en_test, fr_test_out))
+        test_dataset = tf.data.Dataset.from_tensor_slices((en_test, fr_test_in, fr_test_out))
         test_dataset = test_dataset.shuffle(len(en_test), reshuffle_each_iteration=True)\
                                        .batch(GLOBAL_BATCH_SIZE, drop_remainder=True)
         test_dist_dataset = self.strategy.experimental_distribute_dataset(test_dataset)
@@ -87,8 +88,13 @@ class Seq2SeqAttentionTrainer:
         train_accuracy = tf.keras.metrics.Mean()
         one_step_test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
 
-        prediction_idx = np.random.randint(low=0, high=len(en_test), size=1)[0]
-        prediction_en, prediction_fr = en_test[prediction_idx], fr_test_out[prediction_idx]
+        prediction_idx = np.random.randint(low=0, high=len(en_predict), size=1)[0]
+        prediction_en, prediction_fr = en_predict[prediction_idx], fr_predict[prediction_idx]
+        print("input : ", prediction_en)
+        print("output: ", prediction_fr)
+
+        if not os.path.exists("heatmap"):
+          os.mkdir("heatmap")
 
         alignments = []
 
@@ -124,14 +130,14 @@ class Seq2SeqAttentionTrainer:
                 loss = 0
                 one_step_test_accuracy.reset_states()
                 with tf.GradientTape() as tape:
-                    encoder_output, state_h, state_c = self.encoder(en_data, initial_states, training=True)
+                    encoder_output, state_h, state_c = self.encoder(en_data, initial_states, training_mode=True)
                     # shape[1] because we want each word for all batches
                     for i in range(fr_data_out.shape[1]):
                         decoder_input = tf.expand_dims(fr_data_in[:,i], 1)
-                        decoder_output, state_h, state_c = self.decoder(decoder_input,
+                        decoder_output, state_h, state_c, _ = self.decoder(decoder_input,
                                                                         (state_h, state_c),
                                                                         encoder_output,
-                                                                        training=True)
+                                                                        training_mode=True)
                         loss +=compute_loss(decoder_output, fr_data_out[:,i])
                         one_step_test_accuracy.update_state(decoder_output, fr_data_out[:,i])
 
@@ -151,20 +157,20 @@ class Seq2SeqAttentionTrainer:
                                                                         initial_states,))
                 return self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
 
-            def test_step(en_data, fr_data_out):
+            def test_step(en_data, fr_data_in, fr_data_out):
                 loss = 0
                 one_step_test_accuracy.reset_states()
                 initial_states = self.encoder.init_states(self.batch_size)
-                encoder_output, state_h, state_c = self.encoder(en_data, initial_states, training=False)
+                encoder_output, state_h, state_c = self.encoder(en_data, initial_states, training_mode=False)
 
                 decoder_input = tf.constant(self.fr_tokenizer.word_index['<start>'], shape=(self.batch_size, 1))
 
-                for i in range(fr_data_out.shape[1]): 
-                    decoder_output, state_h, state_c = self.decoder(decoder_input,
+                for i in range(fr_data_out.shape[1]):
+                    decoder_input = tf.expand_dims(fr_data_in[:,i], 1)
+                    decoder_output, state_h, state_c, _ = self.decoder(decoder_input,
                                                                     (state_h, state_c),
                                                                     encoder_output,
-                                                                    training=False)
-                    decoder_input =tf.expand_dims(tf.argmax(decoder_output, 1),1)
+                                                                    training_mode=False)
                     loss +=compute_loss(decoder_output, fr_data_out[:,i])
                     one_step_test_accuracy.update_state(decoder_output, fr_data_out[:,i])
                 
@@ -172,9 +178,10 @@ class Seq2SeqAttentionTrainer:
                 return loss/fr_data_out.shape[1]
 
             @tf.function
-            def distributed_test_step(en_data, fr_data_out):
+            def distributed_test_step(en_data, fr_data_in, fr_data_out):
                 per_replica_losses = self.strategy.experimental_run_v2(test_step,
                                                                  args=(en_data,
+                                                                       fr_data_in,
                                                                        fr_data_out,))
                 return self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
             print("starting training with {} epochs with prediction each {} epoch" .format(epochs, self.predict_every))
@@ -192,8 +199,8 @@ class Seq2SeqAttentionTrainer:
                 train_losses.append(total_loss/num_batches)
                 total_loss = 0.0
                 num_batches = 0
-                for _, (en_data, fr_data_out) in enumerate(test_dist_dataset):
-                    loss = distributed_test_step(en_data, fr_data_out)
+                for _, (en_data, fr_data_in, fr_data_out) in enumerate(test_dist_dataset):
+                    loss = distributed_test_step(en_data, fr_data_in, fr_data_out)
                     total_loss += loss
                     num_batches += 1
                 
@@ -211,18 +218,24 @@ class Seq2SeqAttentionTrainer:
                 if int(epoch) % 5 == 0:
                     save_path = manager.save()
                     print("Saving checkpoint for epoch {}: {}".format(epoch, save_path))
-                if epoch % self.predict_every == 0:         
-                    alignment, source, predicted = self.predict(prediction_en, prediction_fr)
-                    alignments.append(np.squeeze(alignments, (1, 2)))
-                    if print_heatmap:
-                        fig = plt.figure(figsize=(10, 10))
-                        ax = fig.add_subplot(1, 1, 1)
-                        ax.matshow(attention, cmap='jet')
-                        ax.set_xticklabels([''] + source, rotation=90)
-                        ax.set_yticklabels([''] + predicted)
 
-                        plt.savefig('heatmap/test_{}.png' .format(epoch//self.predict_every))
-                        plt.close()
+                print_prediction = False
+                if epoch % self.predict_every == 0:
+                    print_prediction = True
+
+                alignment, source, predicted = self.predict(prediction_en, prediction_fr, print_prediction)
+                if print_heatmap:
+                    attention_map = np.squeeze(alignment, (1, 2))
+                    alignments.append(attention_map)
+                    fig = plt.figure(figsize=(10, 10))
+                    ax = fig.add_subplot(1, 1, 1)
+                    ax.matshow(attention_map, cmap='jet')
+                    ax.set_xticklabels([''] + source, rotation=90)
+                    ax.set_yticklabels([''] + predicted)
+
+                    plt.savefig('heatmap/prediction_{}.png' .format(epoch//self.predict_every))
+                    #plt.show()
+                    plt.close()
             save_path = manager.save()
             print ('Saving checkpoint for end at {}'.format(save_path))
 

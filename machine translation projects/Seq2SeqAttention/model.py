@@ -45,15 +45,15 @@ class Encoder(tf.keras.Model):
     self.embedding = tf.keras.layers.Embedding(vocab_size, embedding_size, name="Encoder_embedding")
     self.lstm_layer = tf.keras.layers.LSTM(units=lstm_units, dropout=0.2, return_sequences=True, return_state=True, name="Encoder_LSTM")
 
-  def call(self, input_seq, initial_state):
+  def call(self, input_seq, initial_state, training_mode):
     # input_seq =shape [batch_size, seq_max_len]
     # initial_state shape [batch_size, lstm_hidden_state_size]
 
     # embedding shape [batch_size, seq_max_len, embedding_size]
-    embedded_input = self.embedding(input_seq)
+    embedded_input = self.embedding(input_seq, training=training_mode)
     #encoder output shape [batch_size, seq_max_len, lstm_size]
     # state_h, state_c shape 2*[batch_size, lstm_size]
-    encoder_out, state_h, state_c = self.lstm_layer(inputs=embedded_input, initial_state=initial_state)
+    encoder_out, state_h, state_c = self.lstm_layer(inputs=embedded_input, initial_state=initial_state, training=training_mode)
 
     return encoder_out, state_h, state_c
   
@@ -74,15 +74,15 @@ class Decoder(tf.keras.Model):
     self.W_c = tf.keras.layers.Dense(lstm_units, activation="tanh", name="Attention_W_c")
     self.W_s = tf.keras.layers.Dense(vocab_size, name="Attenton_W_s")
 
-  def call(self, decoder_input, hidden_states, encoder_output):
+  def call(self, decoder_input, hidden_states, encoder_output, training_mode):
     # decoder_input shape [batch_size, 1]
     # hidden_states shape 2*[batch_size, lstm_size]
     # encoder_output shape [batch_size, seq_max_len, lstm_size]
-    embedded_input = self.embedding_layer(decoder_input)
+    embedded_input = self.embedding_layer(decoder_input, training=training_mode)
     # embedded_input shape [batch_size, 1, embedding_size]
     # lstm_out shape [batch_size, 1, lstm_size]
     # state_h, state_c shape 2*[batch_szie, lstm_size]
-    lstm_out, state_h, state_c = self.lstm_layer(embedded_input, hidden_states)
+    lstm_out, state_h, state_c = self.lstm_layer(embedded_input, hidden_states, training=training_mode)
 
     # context shape [batch_size, 1 lstm_size]
     # alignment shape [batch_size, 1, source_len]
@@ -94,7 +94,7 @@ class Decoder(tf.keras.Model):
     # output_vector shape [batch_size, lstm_units]
     output_vector = self.W_c(lstm_out)
 
-    # conversion to vocabulaty prob
+    # conversion to vocabulary prob
     # output_vector shape [batch_size, vocab_size]
     output_vector = self.W_s(output_vector)
     return output_vector, state_h, state_c, alignment

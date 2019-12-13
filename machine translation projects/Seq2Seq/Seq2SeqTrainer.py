@@ -78,7 +78,6 @@ class Seq2SeqTrainer:
         test_accuracyVec =[]
         test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
         train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
-        one_step_test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
 
         with self.strategy.scope():
             self.optimizer = tf.keras.optimizers.Adam(clipnorm=5.0)
