@@ -49,7 +49,7 @@ class Seq2SeqAttentionTrainer:
         
         return np.array(alignments), en_sentence.split(' '), predicted_sentence.split(' ')
 
-    def train(self, train_dataset_data, test_dataset_data, prediction_data, tokenizers, epochs, attention_type, restore_checkpoint=True):
+    def train(self, train_dataset_data, test_dataset_data, prediction_data, tokenizers, epochs, attention_type, restore_checkpoint=False):
         """
             train_dataset_data should be made from (en_train, fr_train_in, fr_train_out)
             test_dataset_data should be made from (en_test, fr_test_in, fr_test_out)
@@ -84,9 +84,8 @@ class Seq2SeqAttentionTrainer:
         train_losses = []
         train_accuracyVec = []
         test_accuracyVec =[]
-        test_accuracy = tf.keras.metrics.Mean()
-        train_accuracy = tf.keras.metrics.Mean()
-        one_step_test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
+        test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
+        train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
 
         prediction_idx = np.random.randint(low=0, high=len(en_predict), size=1)[0]
         prediction_en, prediction_fr = en_predict[prediction_idx], fr_predict[prediction_idx]
@@ -128,7 +127,8 @@ class Seq2SeqAttentionTrainer:
             # one training step
             def train_step(en_data, fr_data_in, fr_data_out, initial_states):
                 loss = 0
-                one_step_test_accuracy.reset_states()
+                predicted_output = None
+                train_accuracy.reset_states()
                 with tf.GradientTape() as tape:
                     encoder_output, state_h, state_c = self.encoder(en_data, initial_states, training_mode=True)
                     # shape[1] because we want each word for all batches
@@ -139,13 +139,20 @@ class Seq2SeqAttentionTrainer:
                                                                         encoder_output,
                                                                         training_mode=True)
                         loss +=compute_loss(decoder_output, fr_data_out[:,i])
-                        one_step_test_accuracy.update_state(decoder_output, fr_data_out[:,i])
+                        decoder_output = tf.expand_dims(decoder_output, axis=1)
+                        if i == 0:
+                          predicted_output = decoder_output
+                        else:
+                          predicted_output = tf.concat([predicted_output, decoder_output], axis=1)
 
                 trainable_vars = self.encoder.trainable_variables + self.decoder.trainable_variables
                 grads = tape.gradient(loss, trainable_vars)
                 self.optimizer.apply_gradients(zip(grads, trainable_vars))
 
-                train_accuracy.update_state(one_step_test_accuracy.result())
+                #print("train_step predicted_output ", predicted_output)
+                #print("train_step desired_output : ", fr_data_out)
+                train_accuracy.update_state(fr_data_out, predicted_output)
+
                 return loss / fr_data_out.shape[1]
 
             @tf.function
@@ -159,7 +166,7 @@ class Seq2SeqAttentionTrainer:
 
             def test_step(en_data, fr_data_in, fr_data_out):
                 loss = 0
-                one_step_test_accuracy.reset_states()
+                predicted_output = []
                 initial_states = self.encoder.init_states(self.batch_size)
                 encoder_output, state_h, state_c = self.encoder(en_data, initial_states, training_mode=False)
 
@@ -172,9 +179,17 @@ class Seq2SeqAttentionTrainer:
                                                                     encoder_output,
                                                                     training_mode=False)
                     loss +=compute_loss(decoder_output, fr_data_out[:,i])
-                    one_step_test_accuracy.update_state(decoder_output, fr_data_out[:,i])
-                
-                train_accuracy.update_state(one_step_test_accuracy.result())
+
+                    decoder_output = tf.expand_dims(decoder_output, axis=1)
+                    if i == 0:
+                      predicted_output = decoder_output
+                    else:
+                      predicted_output = tf.concat([predicted_output, decoder_output], axis=1)
+                      
+                #print("test_step predicted_output ", predicted_output)
+                #print("test_step desired_output : ", fr_data_out)
+                test_accuracy.update_state(fr_data_out, predicted_output)
+
                 return loss/fr_data_out.shape[1]
 
             @tf.function
@@ -233,7 +248,7 @@ class Seq2SeqAttentionTrainer:
                     ax.set_xticklabels([''] + source, rotation=90)
                     ax.set_yticklabels([''] + predicted)
 
-                    plt.savefig('heatmap/prediction_{}.png' .format(epoch//self.predict_every))
+                    plt.savefig('heatmap/prediction_{}.png' .format(epoch))
                     #plt.show()
                     plt.close()
             save_path = manager.save()

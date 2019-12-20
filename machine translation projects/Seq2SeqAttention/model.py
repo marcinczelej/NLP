@@ -1,5 +1,4 @@
 import tensorflow as tf
-
 """
 class that implements LuangAttention
   - uses current decoder output as input to calculate alligment vector

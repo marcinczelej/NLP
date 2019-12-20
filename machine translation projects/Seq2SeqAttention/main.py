@@ -3,13 +3,15 @@ import sys
 import argparse
 import matplotlib.pyplot as plt
 import tensorflow as tf
+
+from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
 
 sys.path.insert(0, r"../utilities")
 
 from utils import *
 import params
-from Trainer import *
+
 from Seq2SeqAttentionTrainer import Seq2SeqAttentionTrainer
 
 def main(args):
@@ -25,17 +27,20 @@ def main(args):
     # en_lines, fr_lines = read_data_files(data_dir, ("small_vocab_en", "small_vocab_fr"))
     
     data = read_data(os.path.join(data_dir, "fra-eng"), "fra.txt")
-    en_lines, fr_lines = list(zip(*data))
-    
-    en_lines = en_lines[:40000]
-    fr_lines = fr_lines[:40000]
 
-    print("Data reading: Done")
-    
+    en_lines, fr_lines = list(zip(*data))
+    en_lines, fr_lines = shuffle(en_lines, fr_lines)
+
+    en_lines = en_lines[:30000]
+    fr_lines = fr_lines[:30000]
+
     en_lines = [normalize(line) for line in en_lines]
     fr_lines = [normalize(line) for line in fr_lines]
 
     en_train, en_test, fr_train, fr_test = train_test_split(en_lines, fr_lines, shuffle=True, test_size=0.1)
+
+    en_lines = en_test
+    fr_lines = fr_test
 
     fr_train_in = ['<start> ' + line for line in fr_train]
     fr_train_out = [line + ' <end>' for line in fr_train]
@@ -49,10 +54,9 @@ def main(args):
     input_data = [fr_train_in, fr_train_out, fr_test_in, fr_test_out, fr_test, fr_train]
     fr_train_in, fr_train_out, fr_test_in, fr_test_out, fr_test, fr_train = tokenizeInput(input_data,
                                                                                           fr_tokenizer)
-
     input_data = [en_train, en_test]
     en_train, en_test = tokenizeInput(input_data, en_tokenizer)
-
+    
     en_vocab_size = len(en_tokenizer.word_index)+1
     fr_vocab_size = len(fr_tokenizer.word_index)+1
     print("en_vocab {}\nfr_vocab {}" .format(en_vocab_size, fr_vocab_size))
@@ -60,7 +64,9 @@ def main(args):
     trainer = Seq2SeqAttentionTrainer(params.BATCH_SIZE, params.LSTM_SIZE, params.EMBEDDING_SIZE, 1)
     print("Starting distributed training loop with:\n  epochs {}\n  batch_szie {}\n  lstm_units {}\n  embedding_size {}\n  attention score {}"\
                 .format(params.EPOCHS, params.BATCH_SIZE, params.LSTM_SIZE, params.EMBEDDING_SIZE, args.attention_type))
-    losses, accuracy = trainer.train([en_train, fr_train_in, fr_train_out], [en_test, fr_test_in, fr_test_out], [en_tokenizer, fr_tokenizer], params.EPOCHS, args.attention_type)
+    
+ 
+    losses, accuracy = trainer.train([en_train, fr_train_in, fr_train_out], [en_test, fr_test_in, fr_test_out], [en_lines, fr_lines], [en_tokenizer, fr_tokenizer], params.EPOCHS, args.attention_type)
      
     train_losses, test_losses = losses
     train_accuracyVec, test_accuracyVec = accuracy
