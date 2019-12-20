@@ -10,16 +10,16 @@ class Encoder(tf.keras.Model):
     self.embeding_layer = tf.keras.layers.Embedding(vocab_size, embedding_size, mask_zero=True, trainable=True)
     self.lstm_layer = tf.keras.layers.LSTM(units, dropout=0.2, return_sequences=True, return_state=True)
   
-  def call(self, sequences, lstm_states):
+  def call(self, sequences, lstm_states, training_mode):
     # sequences shape = [batch_size, seq_max_len]
     # lstm_states = [batch_size, lstm_size] x 2
     # encoder_embedded shape = [batch_size, seq_max_len, embedding_size]
     # output shape = [batch_size, seq_max_len, lstm_size]
     # state_h, state_c shape = [batch_size, lstm_size] x 2
 
-    encoder_embedded = self.embeding_layer(sequences)
+    encoder_embedded = self.embeding_layer(sequences, training=training_mode)
     #print("encoder_embedded = ", encoder_embedded.shape)
-    output, state_h, state_c = self.lstm_layer(encoder_embedded, initial_state=lstm_states)
+    output, state_h, state_c = self.lstm_layer(encoder_embedded, initial_state=lstm_states, training=training_mode)
 
     return output, state_h, state_c
 
@@ -36,15 +36,15 @@ class Decoder(tf.keras.Model):
                                            return_state=True)
     self.dense_layer = tf.keras.layers.Dense(vocab_size)
   
-  def call(self, sequences, lstm_states):
+  def call(self, sequences, lstm_states, training_mode):
     # sequences shape = [batch_size, seq_max_len]
     # embedding shape = [batch_size, seq_max_len, embedding_size]
     # output shape = [batch_szie, seq_max_len, lstm_size]
     # state_h, state_c = [batch_size, lstm_size] x2
     # dense shape = [batch_size, seq_max_len, vocab_size]
     
-    decoder_embedded = self.embedding_layer(sequences)
-    lstm_output, state_h, state_c = self.lstm_layer(decoder_embedded, lstm_states)
+    decoder_embedded = self.embedding_layer(sequences, training=training_mode)
+    lstm_output, state_h, state_c = self.lstm_layer(decoder_embedded, lstm_states, training=training_mode)
     return self.dense_layer(lstm_output), state_h, state_c
 
 def test_encoder_decoder_shapes():

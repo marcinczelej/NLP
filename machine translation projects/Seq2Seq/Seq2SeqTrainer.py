@@ -16,32 +16,33 @@ class Seq2SeqTrainer:
         self.fr_tokenizer = None
         self.en_tokenizer = None
 
-    def predict(self, input_data, real_data_out):
-      en_sentence = self.en_tokenizer.sequences_to_texts([input_data])
-      input_data = tf.expand_dims(input_data, 0)
+    def predict(self, en_sentence, fr_sentence):
+      tokenized_en_sentence = self.en_tokenizer.texts_to_sequences([en_sentence])
       initial_states = self.encoder.init_states(1)
-      _, state_h, state_c = self.encoder(tf.constant(input_data), initial_states, training=False)
+      _, state_h, state_c = self.encoder(tf.constant(tokenized_en_sentence), initial_states, training_mode=False)
 
       symbol = tf.constant([[self.fr_tokenizer.word_index['<start>']]])
       sentence = []
 
       while True:
-          symbol, state_h, state_c = self.decoder(symbol, (state_h, state_c), training=False)
+          symbol, state_h, state_c = self.decoder(symbol, (state_h, state_c), training_mode=False)
           # argmax to get max index 
           symbol = tf.argmax(symbol, axis=-1)
           word = self.fr_tokenizer.index_word[symbol.numpy()[0][0]]
 
-          if word == '<end>' or len(sentence) >= len(real_data_out):
+          if word == '<end>' or len(sentence) >= len(fr_sentence):
               break
 
           sentence.append(word)
+        
+      predicted_sentence = ' '.join(sentence)
       print("--------------PREDICTION--------------")
       print("  English   :  {}" .format(en_sentence))
-      print("  Predicted :  {}" .format(' '.join(sentence)))
-      print("  Correct   :  {}" .format(self.fr_tokenizer.sequences_to_texts([real_data_out[:-1]])))
+      print("  Predicted :  {}" .format(predicted_sentence))
+      print("  Correct   :  {}" .format(fr_sentence))
       print("------------END PREDICTION------------")
 
-    def train(self, train_dataset_data, test_dataset_data, tokenizers, epochs, restore_checkpoint=True):
+    def train(self, train_dataset_data, test_dataset_data, prediction_data, tokenizers, epochs, restore_checkpoint=False):
         """
             parameters:
                 train_dataset_data, test_dataset_data, tokenizers, epochs, restore_checkpoint=True
@@ -50,6 +51,7 @@ class Seq2SeqTrainer:
                 test_dataset_data should be made from (en_test, fr_test_in, fr_test_out)
         """
         
+        en_predict, fr_predict = prediction_data
         self.en_tokenizer, self.fr_tokenizer = tokenizers
         en_vocab_size = len(self.en_tokenizer.word_index)+1
         fr_vocab_size = len(self.fr_tokenizer.word_index)+1
@@ -78,6 +80,11 @@ class Seq2SeqTrainer:
         test_accuracyVec =[]
         test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
         train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
+        
+        prediction_idx = np.random.randint(low=0, high=len(en_predict), size=1)[0]
+        prediction_en, prediction_fr = en_predict[prediction_idx], fr_predict[prediction_idx]
+        print("input : ", prediction_en)
+        print("output: ", prediction_fr)
 
         with self.strategy.scope():
             self.optimizer = tf.keras.optimizers.Adam(clipnorm=5.0)
@@ -109,8 +116,8 @@ class Seq2SeqTrainer:
             # one training step
             def train_step(encoder_input, decoder_in, decoder_out, initial_states):
                 with tf.GradientTape() as tape:
-                    encoder_states = self.encoder(encoder_input, initial_state, training=True)
-                    predicted_data, _, _ = self.decoder(decoder_in, encoder_states[1:], training=True)
+                    encoder_states = self.encoder(encoder_input, initial_state, training_mode=True)
+                    predicted_data, _, _ = self.decoder(decoder_in, encoder_states[1:], training_mode=True)
                     loss = compute_loss(predicted_data, decoder_out)
 
                 trainable = self.encoder.trainable_variables + self.decoder.trainable_variables
@@ -131,8 +138,8 @@ class Seq2SeqTrainer:
         
             def test_step(encoder_input, decoder_in, decoder_out):
                 initial_state = self.encoder.init_states(self.batch_size)
-                encoder_states = self.encoder(encoder_input, initial_state, training=False)
-                predicted_data, _, _ = self.decoder(decoder_in, encoder_states[1:], training=False)
+                encoder_states = self.encoder(encoder_input, initial_state, training_mode=False)
+                predicted_data, _, _ = self.decoder(decoder_in, encoder_states[1:], training_mode=False)
                 loss = compute_loss(predicted_data, decoder_out)
 
                 test_accuracy.update_state(decoder_out, predicted_data)
@@ -179,9 +186,5 @@ class Seq2SeqTrainer:
                     print("Saving checkpoint for epoch {}: {}".format(epoch, save_path))
 
                 if epoch % self.predict_every == 0:
-                    try:
-                        idx = np.random.randint(low=0, high=len(en_test), size=1)[0]
-                        self.predict(en_test[idx], fr_test_out[idx])
-                    except:
-                        print(" prediction thrown...")
+                    self.predict(prediction_en, prediction_fr)
         return (train_losses, test_losses), (train_accuracyVec, test_accuracyVec)

@@ -57,16 +57,16 @@ class Encoder(tf.keras.Model):
     self.embeding_layer = tf.keras.layers.Embedding(vocab_size, embedding_size, mask_zero=True, trainable=True)
     self.lstm_layer = tf.keras.layers.LSTM(units, dropout=0.2, return_sequences=True, return_state=True)
   
-  def call(self, sequences, lstm_states):
+  def call(self, sequences, lstm_states, training_mode):
     # sequences shape = [batch_size, seq_max_len]
     # lstm_states = [batch_size, lstm_size] x 2
     # encoder_embedded shape = [batch_size, seq_max_len, embedding_size]
     # output shape = [batch_size, seq_max_len, lstm_size]
     # state_h, state_c shape = [batch_size, lstm_size] x 2
 
-    encoder_embedded = self.embeding_layer(sequences)
+    encoder_embedded = self.embeding_layer(sequences, training=training_mode)
     #print("encoder_embedded = ", encoder_embedded.shape)
-    output, state_h, state_c = self.lstm_layer(encoder_embedded, initial_state=lstm_states)
+    output, state_h, state_c = self.lstm_layer(encoder_embedded, initial_state=lstm_states, training=training_mode)
 
     return output, state_h, state_c
 
@@ -97,15 +97,15 @@ class Decoder(tf.keras.Model):
                                            return_state=True)
     self.dense_layer = tf.keras.layers.Dense(vocab_size)
   
-  def call(self, sequences, lstm_states):
+  def call(self, sequences, lstm_states, training_mode):
     # sequences shape = [batch_size, seq_max_len]
     # embedding shape = [batch_size, seq_max_len, embedding_size]
     # output shape = [batch_szie, seq_max_len, lstm_size]
     # state_h, state_c = [batch_size, lstm_size] x2
     # dense shape = [batch_size, seq_max_len, vocab_size]
     
-    decoder_embedded = self.embedding_layer(sequences)
-    lstm_output, state_h, state_c = self.lstm_layer(decoder_embedded, lstm_states)
+    decoder_embedded = self.embedding_layer(sequences, training=training_mode)
+    lstm_output, state_h, state_c = self.lstm_layer(decoder_embedded, lstm_states, training=training_mode)
     return self.dense_layer(lstm_output), state_h, state_c
 ```
 
@@ -170,6 +170,9 @@ Preprocessing is  process that has to be done before we can feed data into our m
 
     en_train, en_test, fr_train, fr_test = train_test_split(en_lines, fr_lines, shuffle=True, test_size=0.1)
 
+    en_lines = en_test
+    fr_lines = fr_test
+
     fr_train_in = ['<start> ' + line for line in fr_train]
     fr_train_out = [line + ' <end>' for line in fr_train]
 
@@ -181,8 +184,7 @@ Preprocessing is  process that has to be done before we can feed data into our m
 
     input_data = [fr_train_in, fr_train_out, fr_test_in, fr_test_out, fr_test, fr_train]
     fr_train_in, fr_train_out, fr_test_in, fr_test_out, fr_test, fr_train = tokenizeInput(input_data,
-                                                                                        fr_tokenizer)
-
+                                                                                          fr_tokenizer)
     input_data = [en_train, en_test]
     en_train, en_test = tokenizeInput(input_data, en_tokenizer)
     ```
@@ -270,14 +272,14 @@ distributed_train_step(...) makes distributional part happens:
 
 - we have to use `tf.strategy.MirroredStrategy.experimental_run_v2(method_name, args=(... ,))`   <- **IMPORTANT COMA AT THE END**
   to get distributed losses(vector of losses)
-- then `tf.strategy.MirroredStrategy.reduce(tf.distribute.ReduceOp.SUM, ...)` to take sum of losses and calcualte output loss from whole distributed models
+- then `tf.strategy.MirroredStrategy.reduce(tf.distribute.ReduceOp.SUM, ...)` to take sum of losses and calculate output loss from whole distributed models
 
 ```python
 # one training step
 def train_step(encoder_input, decoder_in, decoder_out, initial_states):
     with tf.GradientTape() as tape:
-        encoder_states = self.encoder(encoder_input, initial_state, training=True)
-        predicted_data, _, _ = self.decoder(decoder_in, encoder_states[1:], training=True)
+        encoder_states = self.encoder(encoder_input, initial_state, training_mode=True)
+        predicted_data, _, _ = self.decoder(decoder_in, encoder_states[1:], training_mode=True)
         loss = compute_loss(predicted_data, decoder_out)
 
     trainable = self.encoder.trainable_variables + self.decoder.trainable_variables
@@ -300,13 +302,13 @@ def distributed_train_step(encoder_input, decoder_in, decoder_out, initial_state
 Test_step differences:
 
 - there is no `tf.GradientTape` + backpropagation step
-- `training=False` for encoder/decoder object
+- `training_mode=False` for encoder/decoder object
 
 ```python
 def test_step(encoder_input, decoder_in, decoder_out):
     initial_state = self.encoder.init_states(self.batch_size)
-    encoder_states = self.encoder(encoder_input, initial_state, training=False)
-    predicted_data, _, _ = self.decoder(decoder_in, encoder_states[1:], training=False)
+    encoder_states = self.encoder(encoder_input, initial_state, tratraining_modeining=False)
+    predicted_data, _, _ = self.decoder(decoder_in, encoder_states[1:], training_mode=False)
     loss = compute_loss(predicted_data, decoder_out)
 
     test_accuracy.update_state(decoder_out, predicted_data)
@@ -333,30 +335,31 @@ Basically what`s going on here is following:
 - This process is repeated until `<end>` token is predicted or max length is reached
 
 ```python
-def predict(input_data, real_data_out):
-    en_sentence = self.en_tokenizer.sequences_to_texts([input_data])
-    input_data = tf.expand_dims(input_data, 0)
-    initial_states = self.encoder.init_states(1)
-    _, state_h, state_c = self.encoder(tf.constant(input_data), initial_states, training=False)
+def predict(self, en_sentence, fr_sentence):
+  tokenized_en_sentence = self.en_tokenizer.texts_to_sequences([en_sentence])
+  initial_states = self.encoder.init_states(1)
+  _, state_h, state_c = self.encoder(tf.constant(tokenized_en_sentence), initial_states, training_mode=False)
 
-    symbol = tf.constant([[self.fr_tokenizer.word_index['<start>']]])
-    sentence = []
+  symbol = tf.constant([[self.fr_tokenizer.word_index['<start>']]])
+  sentence = []
 
-    while True:
-        symbol, state_h, state_c = self.decoder(symbol, (state_h, state_c), training=False)
-        # argmax to get max index 
-        symbol = tf.argmax(symbol, axis=-1)
-        word = self.fr_tokenizer.index_word[symbol.numpy()[0][0]]
+  while True:
+      symbol, state_h, state_c = self.decoder(symbol, (state_h, state_c), training_mode=False)
+      # argmax to get max index 
+      symbol = tf.argmax(symbol, axis=-1)
+      word = self.fr_tokenizer.index_word[symbol.numpy()[0][0]]
 
-        if word == '<end>' or len(sentence) >= len(real_data_out):
-            break
+      if word == '<end>' or len(sentence) >= len(fr_sentence):
+          break
 
-        sentence.append(word)
-    print("--------------PREDICTION--------------")
-    print("  English   :  {}" .format(en_sentence))
-    print("  Predicted :  {}" .format(' '.join(sentence)))
-    print("  Correct   :  {}" .format(self.fr_tokenizer.sequences_to_texts([real_data_out])))
-    print("------------END PREDICTION------------")
+      sentence.append(word)
+    
+  predicted_sentence = ' '.join(sentence)
+  print("--------------PREDICTION--------------")
+  print("  English   :  {}" .format(en_sentence))
+  print("  Predicted :  {}" .format(predicted_sentence))
+  print("  Correct   :  {}" .format(fr_sentence))
+  print("------------END PREDICTION------------")
 ```
 
 5. **Main loop**
