@@ -2,6 +2,7 @@ import os
 import sys
 import numpy as np
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
 from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
@@ -63,7 +64,6 @@ def main():
     train_losses, test_losses = losses 
     train_accuracyVec, test_accuracyVec = accuracy
 
-    import matplotlib.pyplot as plt
     fig = plt.figure()
     fig_plot = fig.add_subplot()
     fig_plot.plot(train_losses, label="train_loss")
