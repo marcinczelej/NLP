@@ -41,7 +41,7 @@ class TransformerTrainer:
         self.en_tokenizer = None
         self.checkpoint_path = "./checkpoints/train"
 
-    def train(self, train_dataset_data, test_dataset_data, tokenizers, epochs, restore_checkpoint=True):
+    def train(self, train_dataset_data, test_dataset_data, tokenizers, epochs, restore_checkpoint=False):
         """
             Parameters:
                 train_dataset_data, test_dataset_data, tokenizers, epochs, restore_checkpoint=True
@@ -172,26 +172,6 @@ class TransformerTrainer:
                                                           real_data_out,))
               return self.strategy.reduce(tf.distribute.ReduceOp.SUM, per_replica_losses, axis=None)
 
-          def predict(input_data, real_data_out):
-              output_seq = []
-              input_seq = self.en_tokenizer.sequences_to_texts([input_data])
-              real_in = [self.fr_tokenizer.word_index['<start>']]
-              real_in = tf.expand_dims(real_in, 0)
-              end_tag = self.fr_tokenizer.texts_to_sequences(['<end>'])[0][0]
-              input_data = tf.expand_dims(input_data, 0)
-              for _ in range(real_data_out.shape[1]):
-                  encoder_pad_mask = makePaddingMask(input_data)
-                  elements_mask = makeSequenceMask(real_in.shape[1])
-                  predicted_data = self.transformer_model(input_data, real_in, encoder_pad_mask, elements_mask, training_enabled=False, training=True)
-                  predicted_data = tf.cast(tf.argmax(predicted_data[:, -1:, :], axis=-1), tf.int32)
-                  if predicted_data.numpy()[0][0] == end_tag:
-                      break
-                  real_in = tf.concat([real_in, predicted_data], axis = -1)
-                  output_seq.append(self.fr_tokenizer.index_word[predicted_data.numpy()[0][0]])  
-              print("           English   :", input_seq)
-              print("           Predicted :", " ".join(output_seq))
-              print("           Correct   :", self.fr_tokenizer.sequences_to_texts([real_data_out]))
-
           for epoch in range(epochs):
               total_loss = 0
               num_batches = 0
@@ -223,7 +203,7 @@ class TransformerTrainer:
               test_accuracyVec.append(test_accuracy.result())
 
               idx = np.random.randint(low=0, high=len(en_test), size=1)[0]
-              predict(en_test[idx], fr_test_out[idx])
+              self.predict(en_test[idx], fr_test_out[idx])
 
               ckpt.epoch.assign_add(1)
               if int(epoch) % 5 == 0:

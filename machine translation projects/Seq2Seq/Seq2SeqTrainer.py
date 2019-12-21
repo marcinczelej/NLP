@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-from model import Encoder, Decoder
+from Seq2Seqmodel import Encoder, Decoder
 
 class Seq2SeqTrainer:
     def __init__(self, batch_size, lstm_size, embedding_size, predict_every):
