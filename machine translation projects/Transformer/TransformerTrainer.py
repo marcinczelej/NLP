@@ -41,30 +41,26 @@ class TransformerTrainer:
         self.en_tokenizer = None
         self.checkpoint_path = "./checkpoints/train"
 
-    def predict(self, input_data, real_data_out):
+    def predict(self, en_sequence, real_data_out):
               output_seq = []
-              tokenized_input_data = self.en_tokenizer.texts_to_sequences([input_data])
+              tokenized_input_data = self.en_tokenizer.texts_to_sequences([en_sequence])
               tokenized_real_data_out = self.fr_tokenizer.texts_to_sequences([real_data_out])
-              print(" real_data_out ", real_data_out)
-              print("tokenized_real_data_out ", tokenized_real_data_out)
-              print(" shape tokenized_real_data_out ", len(tokenized_real_data_out[0]))
             
               real_in = [self.fr_tokenizer.word_index['<start>']]
               real_in = tf.expand_dims(real_in, 0)
               end_tag = self.fr_tokenizer.texts_to_sequences(['<end>'])[0][0]
-              input_data = tf.expand_dims(tokenized_input_data, 0)
-              print("input_data ", input_data)
+              input_data = tf.convert_to_tensor(tokenized_input_data)
 
-              for _ in range(len(tokenized_real_data_out[0])):
+              while True:
                   encoder_pad_mask = makePaddingMask(input_data)
                   elements_mask = makeSequenceMask(real_in.shape[1])
                   predicted_data = self.transformer_model(input_data, real_in, encoder_pad_mask, elements_mask, training_enabled=False, training=True)
                   predicted_data = tf.cast(tf.argmax(predicted_data[:, -1:, :], axis=-1), tf.int32)
-                  if predicted_data.numpy()[0][0] == end_tag:
+                  if predicted_data.numpy()[0][0] == end_tag or len(output_seq) >=40:
                       break
                   real_in = tf.concat([real_in, predicted_data], axis = -1)
                   output_seq.append(self.fr_tokenizer.index_word[predicted_data.numpy()[0][0]])  
-              print("           English   :", input_data)
+              print("           English   :", en_sequence)
               print("           Predicted :", " ".join(output_seq))
               print("           Correct   :", real_data_out)
         
