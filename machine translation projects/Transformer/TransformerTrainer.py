@@ -59,10 +59,12 @@ class TransformerTrainer:
                   if predicted_data.numpy()[0][0] == end_tag or len(output_seq) >=40:
                       break
                   real_in = tf.concat([real_in, predicted_data], axis = -1)
-                  output_seq.append(self.fr_tokenizer.index_word[predicted_data.numpy()[0][0]])  
+                  output_seq.append(self.fr_tokenizer.index_word[predicted_data.numpy()[0][0]])
+              print("----------------------------PREDICTION----------------------------")
               print("           English   :", en_sequence)
               print("           Predicted :", " ".join(output_seq))
               print("           Correct   :", real_data_out)
+              print("--------------------------END PREDICTION--------------------------")
         
     def train(self, train_dataset_data, test_dataset_data, prediction_data, tokenizers, epochs, restore_checkpoint=False):
         """
