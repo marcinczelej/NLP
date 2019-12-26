@@ -41,7 +41,34 @@ class TransformerTrainer:
         self.en_tokenizer = None
         self.checkpoint_path = "./checkpoints/train"
 
-    def train(self, train_dataset_data, test_dataset_data, tokenizers, epochs, restore_checkpoint=False):
+    def predict(self, input_data, real_data_out):
+              output_seq = []
+              tokenized_input_data = self.en_tokenizer.texts_to_sequences([input_data])
+              tokenized_real_data_out = self.fr_tokenizer.texts_to_sequences([real_data_out])
+              print(" real_data_out ", real_data_out)
+              print("tokenized_real_data_out ", tokenized_real_data_out)
+              print(" shape tokenized_real_data_out ", len(tokenized_real_data_out[0]))
+            
+              real_in = [self.fr_tokenizer.word_index['<start>']]
+              real_in = tf.expand_dims(real_in, 0)
+              end_tag = self.fr_tokenizer.texts_to_sequences(['<end>'])[0][0]
+              input_data = tf.expand_dims(tokenized_input_data, 0)
+              print("input_data ", input_data)
+
+              for _ in range(len(tokenized_real_data_out[0])):
+                  encoder_pad_mask = makePaddingMask(input_data)
+                  elements_mask = makeSequenceMask(real_in.shape[1])
+                  predicted_data = self.transformer_model(input_data, real_in, encoder_pad_mask, elements_mask, training_enabled=False, training=True)
+                  predicted_data = tf.cast(tf.argmax(predicted_data[:, -1:, :], axis=-1), tf.int32)
+                  if predicted_data.numpy()[0][0] == end_tag:
+                      break
+                  real_in = tf.concat([real_in, predicted_data], axis = -1)
+                  output_seq.append(self.fr_tokenizer.index_word[predicted_data.numpy()[0][0]])  
+              print("           English   :", input_data)
+              print("           Predicted :", " ".join(output_seq))
+              print("           Correct   :", real_data_out)
+        
+    def train(self, train_dataset_data, test_dataset_data, prediction_data, tokenizers, epochs, restore_checkpoint=False):
         """
             Parameters:
                 train_dataset_data, test_dataset_data, tokenizers, epochs, restore_checkpoint=True
@@ -49,6 +76,7 @@ class TransformerTrainer:
                 test_dataset_data should be made from (en_test, fr_test_in, fr_test_out)
         """
         
+        en_predict, fr_predict = prediction_data
         self.en_tokenizer, self.fr_tokenizer = tokenizers
         en_vocab_size = len(self.en_tokenizer.word_index)+1
         fr_vocab_size = len(self.fr_tokenizer.word_index)+1
@@ -81,6 +109,11 @@ class TransformerTrainer:
         test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
         train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
 
+        prediction_idx = np.random.randint(low=0, high=len(en_predict), size=1)[0]
+        prediction_en, prediction_fr = en_predict[prediction_idx], fr_predict[prediction_idx]
+        print("input : ", prediction_en)
+        print("output: ", prediction_fr)
+        
         with self.strategy.scope():
           custom_learning_rate = customLearningRate(warmup_steps=4000,
                                                     d_model=self.d_model)
@@ -202,8 +235,8 @@ class TransformerTrainer:
               train_accuracyVec.append(train_accuracy.result())
               test_accuracyVec.append(test_accuracy.result())
 
-              idx = np.random.randint(low=0, high=len(en_test), size=1)[0]
-              self.predict(en_test[idx], fr_test_out[idx])
+              if epoch%self.predict_every == 0:
+                  self.predict(prediction_en, prediction_fr)
 
               ckpt.epoch.assign_add(1)
               if int(epoch) % 5 == 0:

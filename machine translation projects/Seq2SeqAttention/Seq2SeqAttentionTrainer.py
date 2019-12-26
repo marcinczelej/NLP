@@ -35,7 +35,7 @@ class Seq2SeqAttentionTrainer:
 
             alignments.append(alignment)
 
-            if  word == '<end>':
+            if  word == '<end>' or len(sentence) >=40:
                 break
             sentence.append(word)
 
