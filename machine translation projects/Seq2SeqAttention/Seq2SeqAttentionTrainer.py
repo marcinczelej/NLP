@@ -18,6 +18,28 @@ class Seq2SeqAttentionTrainer:
         self.fr_tokenizer = None
         self.en_tokenizer = None
 
+    def translate(self, en_sentence):
+        tokenized_en_sentence = self.en_tokenizer.texts_to_sequences([en_sentence])
+        initial_states = self.encoder.init_states(1)
+        encoder_out, state_h, state_c = self.encoder(tf.constant(tokenized_en_sentence), initial_states, training_mode=False)
+
+        decoder_in = tf.constant([[self.fr_tokenizer.word_index['<start>']]])
+        sentence = []
+        alignments = []
+        while True:
+            decoder_out, state_h, state_c, alignment = self.decoder( \
+                            decoder_in, (state_h, state_c), encoder_out, training_mode=False)
+            # argmax to get max index 
+            decoder_in = tf.expand_dims(tf.argmax(decoder_out, -1), 0)
+            word = self.fr_tokenizer.index_word[decoder_in.numpy()[0][0]]
+
+            alignments.append(alignment)
+
+            if  word == '<end>' or len(sentence) >=40:
+                break
+            sentence.append(word)
+        return sentence
+        
     def predict(self, en_sentence, fr_sentence, print_prediction):
         tokenized_en_sentence = self.en_tokenizer.texts_to_sequences([en_sentence])
         initial_states = self.encoder.init_states(1)

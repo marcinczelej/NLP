@@ -16,6 +16,26 @@ class Seq2SeqTrainer:
         self.fr_tokenizer = None
         self.en_tokenizer = None
 
+    def translate(self, en_sentence):
+        tokenized_en_sentence = self.en_tokenizer.texts_to_sequences([en_sentence])
+        initial_states = self.encoder.init_states(1)
+        _, state_h, state_c = self.encoder(tf.constant(tokenized_en_sentence), initial_states, training_mode=False)
+
+        symbol = tf.constant([[self.fr_tokenizer.word_index['<start>']]])
+        sentence = []
+
+        while True:
+            symbol, state_h, state_c = self.decoder(symbol, (state_h, state_c), training_mode=False)
+            # argmax to get max index 
+            symbol = tf.argmax(symbol, axis=-1)
+            word = self.fr_tokenizer.index_word[symbol.numpy()[0][0]]
+
+            if word == '<end>' or len(sentence) >= 40:
+              break
+
+            sentence.append(word)
+        return sentence
+        
     def predict(self, en_sentence, fr_sentence):
       tokenized_en_sentence = self.en_tokenizer.texts_to_sequences([en_sentence])
       initial_states = self.encoder.init_states(1)
