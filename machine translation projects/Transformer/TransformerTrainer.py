@@ -23,11 +23,20 @@ class customLearningRate(tf.keras.optimizers.schedules.LearningRateSchedule):
     return tf.math.rsqrt(self.d_model)*tf.math.minimum(firstScheduler, secondScheduler)
 
 class TransformerTrainer:
-    def __init__(self, batch_size, num_layers, d_model, dff, num_heads, predict_every):
+    def __init__(self, batch_size, num_layers, d_model, dff, num_heads, tokenizers, predict_every):
         """
             Parameters: 
-                batch_size, num_layers, d_model, dff, nim_heads, predict_every
+                batch_size - batch_size of input data,
+                num_layers - number of MHA layers
+                d_model - embedding size for wholde model
+                dff - feed forward network layer size
+                num_heads - heads number
+                predict_every - how often to write prediction during training
+                tokenizers - two tokenizers for input and output data. Should be in form en_tokenizer, fr_tokenizer
+                checkpoint_path is set to "./checkpoints/train" by default
         """
+     
+        self.en_tokenizer, self.fr_tokenizer = tokenizers
         self.batch_size = batch_size
         self.num_layers = num_layers
         self.d_model = d_model
@@ -37,17 +46,15 @@ class TransformerTrainer:
         self.strategy = tf.distribute.MirroredStrategy()
         self.transformer_model = None
         self.optimizer = None
-        self.fr_tokenizer = None
-        self.en_tokenizer = None
         self.checkpoint_path = "./checkpoints/train"
 
     def translate(self, en_sentence):
         output_seq = []
-        tokenized_input_data = self.en_tokenizer.texts_to_sequences([en_sentence])
+        tokenized_input_data = self.en_tokenizer.encode([en_sentence])
 
-        real_in = [self.fr_tokenizer.word_index['<start>']]
+        real_in = [self.fr_tokenizer.vocab_size]
         real_in = tf.expand_dims(real_in, 0)
-        end_tag = self.fr_tokenizer.texts_to_sequences(['<end>'])[0][0]
+        end_tag = self.fr_tokenizer.vocab_size+2
         input_data = tf.convert_to_tensor(tokenized_input_data)
 
         while True:
@@ -64,17 +71,17 @@ class TransformerTrainer:
                 break
 
             real_in = tf.concat([real_in, predicted_data], axis = -1)
-            output_seq.append(self.fr_tokenizer.index_word[predicted_data.numpy()[0][0]])
+            output_seq.append(self.fr_tokenizer.decode(predicted_data.numpy()[0][0]))
 
         return output_seq
 
-    def predict(self, en_sequence, real_data_out):
+    def predict(self, en_sentence, real_data_out):
               output_seq = []
-              tokenized_input_data = self.en_tokenizer.texts_to_sequences([en_sequence])         
+              tokenized_input_data = self.en_tokenizer.encode([en_sentence])      
             
-              real_in = [self.fr_tokenizer.word_index['<start>']]
+              real_in = [self.fr_tokenizer.vocab_size]
               real_in = tf.expand_dims(real_in, 0)
-              end_tag = self.fr_tokenizer.texts_to_sequences(['<end>'])[0][0]
+              end_tag = self.fr_tokenizer.vocab_size+2
               input_data = tf.convert_to_tensor(tokenized_input_data)
 
               while True:
@@ -90,33 +97,34 @@ class TransformerTrainer:
                   if predicted_data.numpy()[0][0] == end_tag or len(output_seq) >=40:
                       break
                   real_in = tf.concat([real_in, predicted_data], axis = -1)
-                  output_seq.append(self.fr_tokenizer.index_word[predicted_data.numpy()[0][0]])
+                  output_seq.append(self.fr_tokenizer.decode(predicted_data.numpy()[0][0]))
               print("----------------------------PREDICTION----------------------------")
               print("           English   :", en_sequence)
               print("           Predicted :", " ".join(output_seq))
               print("           Correct   :", real_data_out)
               print("--------------------------END PREDICTION--------------------------")
         
-    def train(self, train_dataset_data, test_dataset_data, prediction_data, tokenizers, epochs, restore_checkpoint=False):
+    def train(self, train_data, test_data, prediction_data, epochs, restore_checkpoint=False):
         """
             Parameters:
-                train_dataset_data, test_dataset_data, tokenizers, epochs, restore_checkpoint=True
-                train_dataset_data should be made from (en_train, fr_train_in, fr_train_out)
-                test_dataset_data should be made from (en_test, fr_test_in, fr_test_out)
+                train_data - input data for training. Should be in form : en_train, fr_train_in, fr_train_out
+                test_data - input data for test step. Should be in form : en_test, fr_test_in, fr_test_out
+                prediction_data - input data for prediction step. Should be in form of: en_predict, fr_predict
+                epochs - number of epochs that should be run
+                restore_checkpoint - should we restore last checkpoint and resume training. Defualt set to false.
         """
         
         en_predict, fr_predict = prediction_data
-        self.en_tokenizer, self.fr_tokenizer = tokenizers
-        en_vocab_size = len(self.en_tokenizer.word_index)+1
-        fr_vocab_size = len(self.fr_tokenizer.word_index)+1
+        en_vocab_size = self.en_tokenizer.vocab_size
+        fr_vocab_size = self.fr_tokenizer.vocab_size + 2
         print("en_vocab {}\nfr_vocab {}" .format(en_vocab_size, fr_vocab_size))
         
         print ('Number of devices: {}'.format(self.strategy.num_replicas_in_sync))
         GLOBAL_BATCH_SIZE = self.batch_size*self.strategy.num_replicas_in_sync
 
         print("creating dataset...")
-        en_train, fr_train_in, fr_train_out = train_dataset_data
-        en_test, fr_test_in, fr_test_out = test_dataset_data
+        en_train, fr_train_in, fr_train_out = train_data
+        en_test, fr_test_in, fr_test_out = test_data
         
         train_dataset = tf.data.Dataset.from_tensor_slices((en_train, fr_train_in, fr_train_out))
         train_dataset = train_dataset.shuffle(len(en_train), reshuffle_each_iteration=True)\
@@ -140,8 +148,8 @@ class TransformerTrainer:
 
         prediction_idx = np.random.randint(low=0, high=len(en_predict), size=1)[0]
         prediction_en, prediction_fr = en_predict[prediction_idx], fr_predict[prediction_idx]
-        print("input : ", prediction_en)
-        print("output: ", prediction_fr)
+        print("prediction input : ", prediction_en)
+        print("prediction output: ", prediction_fr)
         
         with self.strategy.scope():
           custom_learning_rate = customLearningRate(warmup_steps=4000,
