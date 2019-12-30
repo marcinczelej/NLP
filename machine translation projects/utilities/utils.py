@@ -1,6 +1,7 @@
 import unicodedata
 import os
 import re
+import tensorflow as tf
 
 from tensorflow.keras.preprocessing.sequence import pad_sequences
 from tensorflow.keras.preprocessing.text import Tokenizer
@@ -49,17 +50,29 @@ def read_data_files(data_dir, file_names):
     
     return en_lines, fr_lines
 
-def preprocessSeq(texts, tokenizer):
-  texts = tokenizer.texts_to_sequences(texts)
 
-  return pad_sequences(texts, padding='post')
+def makeDatasets(train_data, test_data, batch_size, strategy=None):
+        """
+            Parameters:
+                train_data - input data for training. Should be in form : en_train, fr_train_in, fr_train_out
+                test_data - input data for test step. Should be in form : en_test, fr_test_in, fr_test_out
+                batch_size - batch_size that should be used to create datasets
+                strategy - strategy that datasets should use to be distributed across GPUs. Default is None
+        """
+        print("creating dataset...")
+        en_train, fr_train_in, fr_train_out = train_data
+        en_test, fr_test_in, fr_test_out = test_data
+        
+        train_dataset = tf.data.Dataset.from_tensor_slices((en_train, fr_train_in, fr_train_out))
+        train_dataset = train_dataset.shuffle(len(en_train), reshuffle_each_iteration=True)\
+                                         .batch(batch_size, drop_remainder=True)
 
-def tokenizeInput(input_data, tokenizer):
-    output_data = []
-    for data in input_data:
-        tokenizer.fit_on_texts(data)
-    
-    for data in input_data:
-        output_data.append(preprocessSeq(data, tokenizer))
-    
-    return output_data
+        test_dataset = tf.data.Dataset.from_tensor_slices((en_test, fr_test_in, fr_test_out))
+        test_dataset = test_dataset.shuffle(len(en_test), reshuffle_each_iteration=True)\
+                                       .batch(batch_size, drop_remainder=True)
+        
+        if strategy is not None:
+            train_dataset = strategy.experimental_distribute_dataset(train_dataset)
+            test_dataset = strategy.experimental_distribute_dataset(test_dataset)
+        
+        return train_dataset, test_dataset
