@@ -47,6 +47,8 @@ class TransformerTrainer:
         self.strategy = tf.distribute.MirroredStrategy()
         self.transformer_model = None
         self.optimizer = None
+        self.fr_tokenizer = None
+        self.en_tokenizer = None
         self.checkpoint_path = "./checkpoints/train"
         
     def translate(self, en_sentence):
