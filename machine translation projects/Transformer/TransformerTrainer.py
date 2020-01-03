@@ -47,8 +47,6 @@ class TransformerTrainer:
         self.strategy = tf.distribute.MirroredStrategy()
         self.transformer_model = None
         self.optimizer = None
-        self.fr_tokenizer = None
-        self.en_tokenizer = None
         self.checkpoint_path = "./checkpoints/train"
         
     def translate(self, en_sentence):
@@ -77,14 +75,6 @@ class TransformerTrainer:
             output_seq.append(self.fr_tokenizer.decode(predicted_data.numpy()[0]))
 
         return output_seq
-
-    def predict(self, en_sentence, real_data_out):
-              output_seq = self.translate(en_sentence)
-              print("----------------------------PREDICTION----------------------------")
-              print("           English   :", en_sentence)
-              print("           Predicted :", " ".join(output_seq))
-              print("           Correct   :", real_data_out)
-              print("--------------------------END PREDICTION--------------------------")
         
     def train(self, train_data, test_data, prediction_data, epochs, restore_checkpoint=False):
         """
