@@ -206,8 +206,6 @@ class Seq2SeqAttentionTrainer:
                     else:
                       predicted_output = tf.concat([predicted_output, decoder_output], axis=1)
                       
-                #print("test_step predicted_output ", predicted_output)
-                #print("test_step desired_output : ", fr_data_out)
                 test_accuracy.update_state(fr_data_out, predicted_output)
 
                 return loss/fr_data_out.shape[1]
