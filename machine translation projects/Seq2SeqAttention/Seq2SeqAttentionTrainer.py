@@ -40,17 +40,23 @@ class Seq2SeqAttentionTrainer:
         tokenized_input_data = self.en_tokenizer.encode(en_sentence)      
         tokenized_input_data = tf.expand_dims(tokenized_input_data, 0)
         initial_states = self.encoder.init_states(1)
-        encoder_out, state_h, state_c = self.encoder(tf.constant(tokenized_input_data), initial_states, training_mode=False)
+        encoder_out, state_h, state_c = self.encoder(tf.constant(tokenized_input_data), 
+                                                     initial_states, 
+                                                     training_mode=False)
 
         decoder_in = [self.fr_tokenizer.vocab_size]
+        decoder_in = tf.expand_dims(decoder_in, 0)
         end_tag = self.fr_tokenizer.vocab_size+1
         output_seq = []
         alignments = []
         while True:
-            decoder_out, state_h, state_c, alignment = self.decoder( \
-                            decoder_in, (state_h, state_c), encoder_out, training_mode=False)
+            decoder_out, state_h, state_c, alignment = self.decoder(decoder_in, 
+                                                                    (state_h, state_c), 
+                                                                    encoder_out, 
+                                                                    training_mode=False)
             # argmax to get max index 
             decoder_in = tf.expand_dims(tf.argmax(decoder_out, -1), 0)
+            predicted_data = decoder_in
 
             if  predicted_data.numpy()[0] == end_tag or len(output_seq) >=40:
                 break
@@ -95,8 +101,8 @@ class Seq2SeqAttentionTrainer:
 
         prediction_idx = np.random.randint(low=0, high=len(en_predict), size=1)[0]
         prediction_en, prediction_fr = en_predict[prediction_idx], fr_predict[prediction_idx]
-        print("input : ", prediction_en)
-        print("output: ", prediction_fr)
+        print("prediction input : ", prediction_en)
+        print("prediction output: ", prediction_fr)
 
         if not os.path.exists("heatmap"):
           os.mkdir("heatmap")
@@ -144,15 +150,15 @@ class Seq2SeqAttentionTrainer:
                 predicted_output = None
                 train_accuracy.reset_states()
                 with tf.GradientTape() as tape:
-                    encoder_output, state_h, state_c = self.encoder(input_seq=en_data, 
-                                                                    initial_state=initial_states, 
+                    encoder_output, state_h, state_c = self.encoder(en_data, 
+                                                                    initial_states, 
                                                                     training_mode=True)
                     # shape[1] because we want each word for all batches
                     for i in range(fr_data_out.shape[1]):
                         decoder_input = tf.expand_dims(fr_data_in[:,i], 1)
-                        decoder_output, state_h, state_c, _ = self.decoder(decoder_input=decoder_input,
-                                                                           hidden_states=(state_h, state_c),
-                                                                           encoder_output=encoder_output,
+                        decoder_output, state_h, state_c, _ = self.decoder(decoder_input,
+                                                                           (state_h, state_c),
+                                                                           encoder_output,
                                                                            training_mode=True)
                         
                         loss +=compute_loss(decoder_output, fr_data_out[:,i])
@@ -183,8 +189,8 @@ class Seq2SeqAttentionTrainer:
                 loss = 0
                 predicted_output = []
                 initial_states = self.encoder.init_states(self.batch_size)
-                encoder_output, state_h, state_c = self.encoder(input_seq=en_data, 
-                                                                initial_state=initial_states, 
+                encoder_output, state_h, state_c = self.encoder(en_data, 
+                                                                initial_states, 
                                                                 training_mode=False)
                 for i in range(fr_data_out.shape[1]):
                     decoder_input = tf.expand_dims(fr_data_in[:,i], 1)
@@ -244,12 +250,12 @@ class Seq2SeqAttentionTrainer:
                 train_accuracyVec.append(train_accuracy.result())
                 test_accuracyVec.append(test_accuracy.result())
                 ckpt.epoch.assign_add(1)
-                
+
                 if int(epoch) % 5 == 0:
                     save_path = manager.save()
                     print("Saving checkpoint for epoch {}: {}".format(epoch, save_path))
 
-                alignment, predicted = self.translate(prediction_en)
+                predicted, alignment  = self.translate(prediction_en)
                 
                 if epoch % self.predict_every == 0:
                     print("----------------------------PREDICTION----------------------------")
