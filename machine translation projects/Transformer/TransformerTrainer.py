@@ -50,6 +50,14 @@ class TransformerTrainer:
         self.checkpoint_path = "./checkpoints/train"
         
     def translate(self, en_sentence):
+        """
+            Translates sentence
+            parameters:
+                en_sentence - sentence that will be translated
+            
+            returns:
+                translated sentence
+        """
         output_seq = []
         tokenized_input_data = self.en_tokenizer.encode(en_sentence)      
         tokenized_input_data = tf.expand_dims(tokenized_input_data, 0)
@@ -74,16 +82,19 @@ class TransformerTrainer:
             real_in = tf.concat([real_in, predicted_data], axis = -1)
             output_seq.append(self.fr_tokenizer.decode(predicted_data.numpy()[0]))
 
-        return output_seq
+        return "".join(output_seq)
         
     def train(self, train_data, test_data, prediction_data, epochs, restore_checkpoint=False):
         """
-            Parameters:
+            Training method that uses distributed training
+            parameters:
                 train_data - input data for training. Should be in form : en_train, fr_train_in, fr_train_out
                 test_data - input data for test step. Should be in form : en_test, fr_test_in, fr_test_out
                 prediction_data - input data for prediction step. Should be in form of: en_predict, fr_predict
                 epochs - number of epochs that should be run
                 restore_checkpoint - should we restore last checkpoint and resume training. Defualt set to false.
+            retuns:
+                tuple losses, accuracy where losses = (train_losses, test_losses), accuracy = (train-accuracy, test_accuracy)
         """
         
         en_predict, fr_predict = prediction_data
@@ -232,9 +243,8 @@ class TransformerTrainer:
               if epoch%self.predict_every == 0 and epoch !=0:
                   output_seq = self.translate(prediction_en)
                   print("----------------------------PREDICTION----------------------------")
-                  print("           English   :", prediction_en)
-                  print("           Predicted :", " ".join(output_seq))
-                  print("           Correct   :", prediction_fr)
+                  print("Predicted :", output_seq)
+                  print("Correct   :", prediction_fr)
                   print("--------------------------END PREDICTION--------------------------")
 
               ckpt.epoch.assign_add(1)
