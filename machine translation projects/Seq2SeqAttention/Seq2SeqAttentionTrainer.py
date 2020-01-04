@@ -30,7 +30,8 @@ class Seq2SeqAttentionTrainer:
     def translate(self, en_sentence):
         """
             Translates sentence
-            parameters:
+            
+            Parameters:
                 en_sentence - sentence that will be translated
             
             returns:
@@ -69,12 +70,13 @@ class Seq2SeqAttentionTrainer:
     def train(self, train_data, test_data, prediction_data, epochs, attention_type="general", restore_checkpoint=False):
         """
             Training method that uses distributed training
-            parameters:
+            
+            Parameters:
                 train_data - input data for training. Should be in form : en_train, fr_train_in, fr_train_out
                 test_data - input data for test step. Should be in form : en_test, fr_test_in, fr_test_out
                 prediction_data - input data for prediction step. Should be in form of: en_predict, fr_predict
                 epochs - number of epochs that should be run
-                attaionn_type - what attention method to use " dot/general/concat. Default - general
+                attention_type - what attention method to use " dot/general/concat. Default - general
                 restore_checkpoint - should we restore last checkpoint and resume training. Defualt set to false.
             
             retuns:

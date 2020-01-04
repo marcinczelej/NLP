@@ -20,7 +20,7 @@ tf.get_logger().setLevel('WARNING')
 LSTM_SIZE = 512
 EMBEDDING_SIZE = 250
 BATCH_SIZE= 64
-EPOCHS = 600
+EPOCHS = 20
 
 def main():
     data_dir = "../data"
@@ -84,7 +84,7 @@ def main():
     losses, accuracy = trainer.train(train_data=[en_train, fr_train_in, fr_train_out],
                                     test_data=[en_test, fr_test_in, fr_test_out],
                                     prediction_data=[en_lines, fr_lines],
-                                    epochs=20)
+                                    epochs=EPOCHS)
 
     train_losses, test_losses = losses 
     train_accuracyVec, test_accuracyVec = accuracy
