@@ -2,18 +2,20 @@ import os
 import sys
 import numpy as np
 import tensorflow as tf
+import tensorflow_datasets as tfds
 import matplotlib.pyplot as plt
+
+from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 from sklearn.utils import shuffle
 from sklearn.model_selection import train_test_split
-from tensorflow.keras.preprocessing.text import Tokenizer
-from tensorflow.keras.preprocessing.sequence import pad_sequences
 
 sys.path.insert(0, r"../utilities")
 
 from utils import *
-from model import Encoder, Decoder
 from Seq2SeqTrainer import Seq2SeqTrainer
+
+tf.get_logger().setLevel('WARNING')
 
 LSTM_SIZE = 512
 EMBEDDING_SIZE = 250
@@ -22,14 +24,15 @@ EPOCHS = 600
 
 def main():
     data_dir = "../data"
-    # reading data
+    en_lines, fr_lines = read_data_files(data_dir, ("small_vocab_en", "small_vocab_fr"))
 
-    data = read_data(os.path.join(data_dir, "fra-eng"), "fra.txt")
-    en_lines, fr_lines = list(zip(*data))
+    #data = read_data(os.path.join(data_dir, "fra-eng"), "fra.txt")
+
+    #en_lines, fr_lines = list(zip(*data))
     en_lines, fr_lines = shuffle(en_lines, fr_lines)
 
-    en_lines = en_lines[:30000]
-    fr_lines = fr_lines[:30000]
+    #en_lines = en_lines[:40000]
+    #fr_lines = fr_lines[:40000]
 
     en_lines = [normalize(line) for line in en_lines]
     fr_lines = [normalize(line) for line in fr_lines]
@@ -39,28 +42,50 @@ def main():
     en_lines = en_test
     fr_lines = fr_test
 
-    fr_train_in = ['<start> ' + line for line in fr_train]
-    fr_train_out = [line + ' <end>' for line in fr_train]
+    # creating tokenizers
+    en_tokenizer = tfds.features.text.SubwordTextEncoder.build_from_corpus(
+        (en for en in en_train), target_vocab_size=2**13)
 
-    fr_test_in = ['<start> ' + line for line in fr_test]
-    fr_test_out = [line + ' <end>' for line in fr_test]
+    fr_tokenizer = tfds.features.text.SubwordTextEncoder.build_from_corpus(
+        (fr for fr in fr_train), target_vocab_size=2**13)
 
-    fr_tokenizer = Tokenizer(filters='')
-    en_tokenizer = Tokenizer(filters='')
+    print("en_tokenizer size ", en_tokenizer.vocab_size)
+    print("fr_tokenizer size ", fr_tokenizer.vocab_size)
 
-    input_data = [fr_train_in, fr_train_out, fr_test_in, fr_test_out, fr_test, fr_train]
-    fr_train_in, fr_train_out, fr_test_in, fr_test_out, fr_test, fr_train = tokenizeInput(input_data,
-                                                                                          fr_tokenizer)
-    input_data = [en_train, en_test]
-    en_train, en_test = tokenizeInput(input_data, en_tokenizer)
+    en_tokenizer.save_to_file("en_tokenizer")
+    fr_tokenizer.save_to_file("fr_tokenizer")
 
-    en_vocab_size = len(en_tokenizer.word_index)+1
-    fr_vocab_size = len(fr_tokenizer.word_index)+1
-    print("en_vocab {}\nfr_vocab {}" .format(en_vocab_size, fr_vocab_size))
-    
-    trainer = Seq2SeqTrainer(BATCH_SIZE, LSTM_SIZE, EMBEDDING_SIZE, predict_every=1)
-    losses, accuracy = trainer.train([en_train, fr_train_in, fr_train_out], [en_test, fr_test_in, fr_test_out], [en_lines, fr_lines], [en_tokenizer, fr_tokenizer], 20)
-    
+    # train dataset
+    fr_train_in = [[fr_tokenizer.vocab_size] + fr_tokenizer.encode(line) for line in fr_train]
+    fr_train_out = [fr_tokenizer.encode(line) + [fr_tokenizer.vocab_size+1] for line in fr_train]
+
+    fr_train_in = pad_sequences(fr_train_in, padding='post')
+    fr_train_out = pad_sequences(fr_train_out, padding='post')
+
+    # test dataset
+    fr_test_in = [[fr_tokenizer.vocab_size] + fr_tokenizer.encode(line) for line in fr_test]
+    fr_test_out = [fr_tokenizer.encode(line) + [fr_tokenizer.vocab_size+1] for line in fr_test]
+
+    fr_test_in = pad_sequences(fr_test_in, padding='post')
+    fr_test_out = pad_sequences(fr_test_out, padding='post')
+
+    en_train = [en_tokenizer.encode(line) for line in en_train]
+    en_test = [en_tokenizer.encode(line) for line in en_test]
+
+    en_train = pad_sequences(en_train, padding='post')
+    en_test = pad_sequences(en_test, padding='post')
+
+    trainer = Seq2SeqTrainer(batch_size=BATCH_SIZE, 
+                             lstm_size=LSTM_SIZE, 
+                             embedding_size=EMBEDDING_SIZE, 
+                             tokenizers=[en_tokenizer, fr_tokenizer], 
+                             predict_every=2)
+
+    losses, accuracy = trainer.train(train_data=[en_train, fr_train_in, fr_train_out],
+                                    test_data=[en_test, fr_test_in, fr_test_out],
+                                    prediction_data=[en_lines, fr_lines],
+                                    epochs=20)
+
     train_losses, test_losses = losses 
     train_accuracyVec, test_accuracyVec = accuracy
 

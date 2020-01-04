@@ -2,9 +2,20 @@ import numpy as np
 import tensorflow as tf
 
 from Seq2Seqmodel import Encoder, Decoder
+from utils import makeDatasets
 
 class Seq2SeqTrainer:
-    def __init__(self, batch_size, lstm_size, embedding_size, predict_every):
+    def __init__(self, batch_size, lstm_size, embedding_size, tokenizers, predict_every):
+        """
+            Parameters: 
+                batch_size - batch_size of input data,
+                lstm_size - number of lstm units
+                embedding_size - embedding size for wholde model
+                tokenizers - two tokenizers for input and output data. Should be in form en_tokenizer, fr_tokenizer
+                predict_every - how often to write prediction during training
+        """
+
+        self.en_tokenizer, self.fr_tokenizer = tokenizers
         self.batch_size = batch_size
         self.lstm_size = lstm_size
         self.embedding_size = embedding_size
@@ -13,86 +24,62 @@ class Seq2SeqTrainer:
         self.encoder = None
         self.decoder = None
         self.optimizer = None
-        self.fr_tokenizer = None
-        self.en_tokenizer = None
 
     def translate(self, en_sentence):
-        tokenized_en_sentence = self.en_tokenizer.texts_to_sequences([en_sentence])
-        initial_states = self.encoder.init_states(1)
-        _, state_h, state_c = self.encoder(tf.constant(tokenized_en_sentence), initial_states, training_mode=False)
+        """
+            Translates sentence
 
-        symbol = tf.constant([[self.fr_tokenizer.word_index['<start>']]])
-        sentence = []
+            Parameters:
+                en_sentence - sentence that will be translated
+
+            returns:
+                translated sentence
+        """
+        tokenized_input_data = self.en_tokenizer.encode(en_sentence)      
+        tokenized_input_data = tf.expand_dims(tokenized_input_data, 0)
+        initial_states = self.encoder.init_states(1)
+        _, state_h, state_c = self.encoder(tf.constant(tokenized_input_data), initial_states, training_mode=False)
+
+        symbol = [self.fr_tokenizer.vocab_size]
+        symbol = tf.expand_dims(symbol, 0)
+        end_tag = self.fr_tokenizer.vocab_size+1
+        output_seq = []
 
         while True:
-            symbol, state_h, state_c = self.decoder(symbol, (state_h, state_c), training_mode=False)
+            symbol, state_h, state_c = self.decoder(tf.constant(symbol), (state_h, state_c), training_mode=False)
             # argmax to get max index 
             symbol = tf.argmax(symbol, axis=-1)
-            word = self.fr_tokenizer.index_word[symbol.numpy()[0][0]]
 
-            if word == '<end>' or len(sentence) >= 40:
+            if symbol.numpy()[0][0] == end_tag or len(output_seq) >= 40:
               break
 
-            sentence.append(word)
-        return sentence
-        
-    def predict(self, en_sentence, fr_sentence):
-      tokenized_en_sentence = self.en_tokenizer.texts_to_sequences([en_sentence])
-      initial_states = self.encoder.init_states(1)
-      _, state_h, state_c = self.encoder(tf.constant(tokenized_en_sentence), initial_states, training_mode=False)
+            word = self.fr_tokenizer.decode(symbol.numpy()[0])
+            output_seq.append(word)
+        return "".join(output_seq)
 
-      symbol = tf.constant([[self.fr_tokenizer.word_index['<start>']]])
-      sentence = []
-
-      while True:
-          symbol, state_h, state_c = self.decoder(symbol, (state_h, state_c), training_mode=False)
-          # argmax to get max index 
-          symbol = tf.argmax(symbol, axis=-1)
-          word = self.fr_tokenizer.index_word[symbol.numpy()[0][0]]
-
-          if word == '<end>' or len(sentence) >= len(fr_sentence):
-              break
-
-          sentence.append(word)
-        
-      predicted_sentence = ' '.join(sentence)
-      print("--------------PREDICTION--------------")
-      print("  English   :  {}" .format(en_sentence))
-      print("  Predicted :  {}" .format(predicted_sentence))
-      print("  Correct   :  {}" .format(fr_sentence))
-      print("------------END PREDICTION------------")
-
-    def train(self, train_dataset_data, test_dataset_data, prediction_data, tokenizers, epochs, restore_checkpoint=False):
+    def train(self, train_data, test_data, prediction_data, epochs, restore_checkpoint=False):
         """
-            parameters:
-                train_dataset_data, test_dataset_data, tokenizers, epochs, restore_checkpoint=True
+            Training method that uses distributed training
+            
+            Parameters:
+                train_data - input data for training. Should be in form : en_train, fr_train_in, fr_train_out
+                test_data - input data for test step. Should be in form : en_test, fr_test_in, fr_test_out
+                prediction_data - input data for prediction step. Should be in form of: en_predict, fr_predict
+                epochs - number of epochs that should be run
+                restore_checkpoint - should we restore last checkpoint and resume training. Defualt set to false.
                 
-                train_dataset_data should be made from (en_train, fr_train_in, fr_train_out)
-                test_dataset_data should be made from (en_test, fr_test_in, fr_test_out)
+            retuns:
+                tuple losses, accuracy where losses = (train_losses, test_losses), accuracy = (train-accuracy, test_accuracy)
         """
         
         en_predict, fr_predict = prediction_data
-        self.en_tokenizer, self.fr_tokenizer = tokenizers
-        en_vocab_size = len(self.en_tokenizer.word_index)+1
-        fr_vocab_size = len(self.fr_tokenizer.word_index)+1
-        print("en_vocab {}\nfr_vocab {}" .format(en_vocab_size, fr_vocab_size))
+        en_vocab_size = self.en_tokenizer.vocab_size
+        fr_vocab_size = self.fr_tokenizer.vocab_size + 2
         
         print ('Number of devices: {}'.format(self.strategy.num_replicas_in_sync))
         GLOBAL_BATCH_SIZE = self.batch_size*self.strategy.num_replicas_in_sync
 
-        print("creating dataset...")
-        en_train, fr_train_in, fr_train_out = train_dataset_data
-        en_test, fr_test_in, fr_test_out = test_dataset_data
-        train_dataset = tf.data.Dataset.from_tensor_slices((en_train, fr_train_in, fr_train_out))
-        train_dataset = train_dataset.shuffle(len(en_train), reshuffle_each_iteration=True)\
-                                        .batch(GLOBAL_BATCH_SIZE, drop_remainder=True)
-        train_dataset_distr = self.strategy.experimental_distribute_dataset(train_dataset)
-
-        test_dataset = tf.data.Dataset.from_tensor_slices((en_test, fr_test_in, fr_test_out))
-        test_dataset = test_dataset.shuffle(len(en_test), reshuffle_each_iteration=True)\
-                                       .batch(GLOBAL_BATCH_SIZE, drop_remainder=True)
-        test_dataset_distr = self.strategy.experimental_distribute_dataset(test_dataset)
-        print("dataset created")
+        train_dataset_distr, test_dataset_distr = makeDatasets(train_data, test_data, GLOBAL_BATCH_SIZE, self.strategy)
         
         test_losses = []
         train_losses = []
@@ -205,6 +192,10 @@ class Seq2SeqTrainer:
                     save_path = manager.save()
                     print("Saving checkpoint for epoch {}: {}".format(epoch, save_path))
 
-                if epoch % self.predict_every == 0:
-                    self.predict(prediction_en, prediction_fr)
+                if epoch%self.predict_every == 0 and epoch !=0:
+                  output_seq = self.translate(prediction_en)
+                  print("----------------------------PREDICTION----------------------------")
+                  print("Predicted :", output_seq)
+                  print("Correct   :", prediction_fr)
+                  print("--------------------------END PREDICTION--------------------------")
         return (train_losses, test_losses), (train_accuracyVec, test_accuracyVec)
