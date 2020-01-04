@@ -32,8 +32,8 @@ class TransformerTrainer:
                 d_model - embedding size for wholde model
                 dff - feed forward network layer size
                 num_heads - heads number
-                predict_every - how often to write prediction during training
                 tokenizers - two tokenizers for input and output data. Should be in form en_tokenizer, fr_tokenizer
+                predict_every - how often to write prediction during training
                 checkpoint_path is set to "./checkpoints/train" by default
         """
      
@@ -87,12 +87,14 @@ class TransformerTrainer:
     def train(self, train_data, test_data, prediction_data, epochs, restore_checkpoint=False):
         """
             Training method that uses distributed training
+            
             parameters:
                 train_data - input data for training. Should be in form : en_train, fr_train_in, fr_train_out
                 test_data - input data for test step. Should be in form : en_test, fr_test_in, fr_test_out
                 prediction_data - input data for prediction step. Should be in form of: en_predict, fr_predict
                 epochs - number of epochs that should be run
                 restore_checkpoint - should we restore last checkpoint and resume training. Defualt set to false.
+                
             retuns:
                 tuple losses, accuracy where losses = (train_losses, test_losses), accuracy = (train-accuracy, test_accuracy)
         """
