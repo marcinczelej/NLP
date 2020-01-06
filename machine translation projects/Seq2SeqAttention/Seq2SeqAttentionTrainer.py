@@ -4,7 +4,7 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 
 from Seq2SeqAttmodel import Encoder, Decoder
-from utils import makeDatasets
+from utils import makeDatasets, save_to_csv
 
 class Seq2SeqAttentionTrainer:
     def __init__(self, batch_size, lstm_size, embedding_size, tokenizers, predict_every):
@@ -67,7 +67,7 @@ class Seq2SeqAttentionTrainer:
             
         return "".join(output_seq), alignments
 
-    def train(self, train_data, test_data, prediction_data, epochs, attention_type="general", restore_checkpoint=False):
+    def train(self, train_data, test_data, prediction_data, epochs, attention_type="general", restore_checkpoint=False, csv_name="seq2seqAttention_data.csv"):
         """
             Training method that uses distributed training
             
@@ -78,6 +78,8 @@ class Seq2SeqAttentionTrainer:
                 epochs - number of epochs that should be run
                 attention_type - what attention method to use " dot/general/concat. Default - general
                 restore_checkpoint - should we restore last checkpoint and resume training. Defualt set to false.
+                csv_name - name of csv file where losses/accuracies will be saved. default = seq2seqAttention_data.csv.
+                  If restore_checkpoint is set to False, file will be erased and only current run will be present.
             
             retuns:
                 tuple losses, accuracy where losses = (train_losses, test_losses), accuracy = (train-accuracy, test_accuracy)
@@ -275,7 +277,12 @@ class Seq2SeqAttentionTrainer:
                     plt.savefig('heatmap/prediction_{}.png' .format(epoch))
                     #plt.show()
                     plt.close()
-            save_path = manager.save()
-            print ('Saving checkpoint for end at {}'.format(save_path))
+                    
+        save_path = manager.save()
+        print ('Saving checkpoint for end at {}'.format(save_path))
+        save_to_csv(losses=(train_losses, test_losses), 
+                    accuracy=(train_accuracyVec, test_accuracyVec), 
+                    append=restore_checkpoint,
+                    file_name=csv_name)
 
         return (train_losses, test_losses), (train_accuracyVec, test_accuracyVec)

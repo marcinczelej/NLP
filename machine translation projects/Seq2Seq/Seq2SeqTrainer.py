@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 
 from Seq2Seqmodel import Encoder, Decoder
-from utils import makeDatasets
+from utils import makeDatasets, save_to_csv
 
 class Seq2SeqTrainer:
     def __init__(self, batch_size, lstm_size, embedding_size, tokenizers, predict_every):
@@ -57,7 +57,7 @@ class Seq2SeqTrainer:
             output_seq.append(word)
         return "".join(output_seq)
 
-    def train(self, train_data, test_data, prediction_data, epochs, restore_checkpoint=False):
+    def train(self, train_data, test_data, prediction_data, epochs, restore_checkpoint=False, csv_name="seq2seq_data.csv"):
         """
             Training method that uses distributed training
             
@@ -67,6 +67,8 @@ class Seq2SeqTrainer:
                 prediction_data - input data for prediction step. Should be in form of: en_predict, fr_predict
                 epochs - number of epochs that should be run
                 restore_checkpoint - should we restore last checkpoint and resume training. Defualt set to false.
+                csv_name - name of csv file where losses/accuracies will be saved. default = seq2seq_data.csv.
+                  If restore_checkpoint is set to False, file will be erased and only current run will be present.
                 
             retuns:
                 tuple losses, accuracy where losses = (train_losses, test_losses), accuracy = (train-accuracy, test_accuracy)
@@ -198,4 +200,12 @@ class Seq2SeqTrainer:
                   print("Predicted :", output_seq)
                   print("Correct   :", prediction_fr)
                   print("--------------------------END PREDICTION--------------------------")
+                
+        save_path = manager.save()
+        print ('Saving checkpoint for end at {}'.format(save_path))
+        save_to_csv(losses=(train_losses, test_losses), 
+                    accuracy=(train_accuracyVec, test_accuracyVec), 
+                    append=restore_checkpoint,
+                    file_name=csv_name)
+
         return (train_losses, test_losses), (train_accuracyVec, test_accuracyVec)

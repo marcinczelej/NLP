@@ -1,6 +1,9 @@
-import unicodedata
 import os
 import re
+import unicodedata
+
+import matplotlib.pyplot as plt
+import pandas as pd
 import tensorflow as tf
 
 from tensorflow.keras.preprocessing.sequence import pad_sequences
@@ -76,3 +79,54 @@ def makeDatasets(train_data, test_data, batch_size, strategy=None):
             test_dataset = strategy.experimental_distribute_dataset(test_dataset)
         
         return train_dataset, test_dataset
+    
+def loss_accuracy_plot(losses, accuracy, name = "", save_to_file=True):
+    
+        if not os.path.exists("plots"):
+          os.mkdir("plots")
+        
+        train_losses, test_losses = losses 
+        train_accuracyVec, test_accuracyVec = accuracy
+
+        fig = plt.figure()
+        fig_plot = fig.add_subplot()
+        fig_plot.plot(train_losses, label="train_loss")
+        fig_plot.plot(test_losses, label="test_loss")
+        fig_plot.legend(loc="upper right")
+        fig_plot.set_xlabel("epoch")
+        fig_plot.set_ylabel("loss")
+        fig_plot.grid(linestyle="--")
+        fig.savefig("plots/" + name + "_losses_plot.png")
+        fig.show()
+
+        fig = plt.figure()
+        fig_plot = fig.add_subplot()
+        fig_plot.plot(train_accuracyVec, label="train_accuracy")
+        fig_plot.plot(test_accuracyVec, label="test_accuracy")
+        fig_plot.legend(loc="lower right")
+        fig_plot.set_xlabel("epoch")
+        fig_plot.set_ylabel("accuracy")
+        fig_plot.grid(linestyle="--")
+        fig.savefig("plots/" + name + "_accuracy_plot.png")
+        
+def save_to_csv(losses, accuracy, append, file_name):
+    
+    train_losses, test_losses = losses 
+    train_accuracyVec, test_accuracyVec = accuracy
+
+    if append and os.path.isfile(file_name):
+        print("oppening ", file_name)
+        df = pd.read_csv(file_name)
+    else:
+        print("creating new file: ", file_name)
+        df = pd.DataFrame(columns=['train_loss', 'test_loss', 'train_acc', 'test_acc'])
+    
+    d = {'train_loss':[loss.numpy() for loss in train_losses], 
+         'test_loss' :[loss.numpy() for loss in test_losses], 
+         'train_acc' :[acc.numpy() for acc in train_accuracyVec], 
+         'test_acc'  :[acc.numpy() for acc in test_accuracyVec]}
+    df2 = pd.DataFrame(data = d)
+    df = pd.concat([df, df2], ignore_index=True)
+    df.to_csv("data.csv", index=False)
+
+        
