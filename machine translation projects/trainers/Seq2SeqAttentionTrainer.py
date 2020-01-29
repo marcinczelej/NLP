@@ -3,10 +3,14 @@ import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
 
-from Seq2SeqAttmodel import Encoder, Decoder
+import TrainerBase
+
+sys.path.insert(0, r"../models")
+
+from models.Seq2SeqAttmodel import Encoder, Decoder
 from utils import makeDatasets, save_to_csv
 
-class Seq2SeqAttentionTrainer:
+class Seq2SeqAttentionTrainer(TrainerBase):
     def __init__(self, batch_size, lstm_size, embedding_size, tokenizers, predict_every):
         """
             Parameters: 

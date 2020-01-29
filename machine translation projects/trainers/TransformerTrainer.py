@@ -1,7 +1,11 @@
 import numpy as np
 import tensorflow as tf
 
-from model import *
+import TrainerBase
+
+sys.path.insert(0, r"../models")
+
+from models.TransformerModel import *
 from utils import makeDatasets, save_to_csv
 
 class customLearningRate(tf.keras.optimizers.schedules.LearningRateSchedule):
@@ -23,7 +27,7 @@ class customLearningRate(tf.keras.optimizers.schedules.LearningRateSchedule):
     secondScheduler = step*(self.warmup_steps**-1.5)
     return tf.math.rsqrt(self.d_model)*tf.math.minimum(firstScheduler, secondScheduler)
 
-class TransformerTrainer:
+class TransformerTrainer(TrainerBase):
     def __init__(self, batch_size, num_layers, d_model, dff, num_heads, tokenizers, predict_every):
         """
             Parameters: 

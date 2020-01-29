@@ -1,14 +1,20 @@
 import tensorflow as tf
-"""
-class that implements LuangAttention
-  - uses current decoder output as input to calculate alligment vector
-  - score = h_t_trans*W_a*h_s
-  - h_t - decoder hideden_state
-  - h_s - encoder_output
-  - context_vector = softmax(score)
-"""
+
 class LuangAttention(tf.keras.Model):
+  """
+    class that implements LuangAttention
+      - uses current decoder output as input to calculate alligment vector
+      - score = h_t_trans*W_a*h_s
+      - h_t - decoder hideden_state
+      - h_s - encoder_output
+      - context_vector = softmax(score)
+  """
   def __init__(self, lstm_size, attention_type):
+    """
+      Parameters: 
+          lstm_size - number of lstm units
+          attention_type - attention type that should be used. Possible types: dot/general/concat  
+    """
     super(LuangAttention, self).__init__()
 
     self.W_a = tf.keras.layers.Dense(lstm_size, name="LuangAttention_W_a")
@@ -17,6 +23,18 @@ class LuangAttention(tf.keras.Model):
     self.type = attention_type
   
   def call(self, decoder_output, encoder_output):
+    """
+      Method that calculates Attention vectors
+
+      Parameters:
+        decoder_output - last output of decoder or starting token for first iteration. Should be of shape:
+                          [batch_size, 1, lsts_size]
+        encoder_output - hidden states of encoder. Should be of shape: [batch_size, input_seq_max_len, lstm_size]
+
+      Returns:
+        context_vector - vector that will be used to calcualte final output of ecoder. Shape [batch_sizem, 1, lstm_size]
+        alignment_vector - vctor represents what attention is focusing during given timestep. Shape [batch_size, 1, lstm_size]
+    """
     # encoder_output shape [batch_size, seq_max_len, hidden_units_of_encoder]
     # decoder_output shape [batch_size, 1, hidden_units of decoder]
     # score shape [batch_size, 1, seq_max_len]
@@ -38,6 +56,12 @@ class LuangAttention(tf.keras.Model):
 
 class Encoder(tf.keras.Model):
   def __init__(self, lstm_units, embedding_size, vocab_size):
+    """
+      Parameters: 
+          lstm_size - number of lstm units
+          embedding_size - size of embedding layer
+          vocab_size - size of voabulary for input language
+    """
     super(Encoder, self).__init__()
 
     self.units = lstm_units
@@ -45,6 +69,17 @@ class Encoder(tf.keras.Model):
     self.lstm_layer = tf.keras.layers.LSTM(units=lstm_units, dropout=0.2, return_sequences=True, return_state=True, name="Encoder_LSTM")
 
   def call(self, input_seq, initial_state, training_mode):
+    """
+      Parameters:
+        input_seq - tokenized input sequence of shape [batch_size, seq_max_len]
+        initial_state - initial state of encoder lstsm layer hidden states of shape [batch_size, lstm_size].
+                        Can be get from init_states method of encoder
+        training_mode - are we in training or preidction mode. It`s important for dropouts present in lstm_layer
+      
+      Returns:
+        encoder_out - encoder output states for each timestep of shape [batch_size, seq_max_len, lstm_size]
+        state_h, state_c - hidden states of lstm_layer of shape 2*[batch_size, lstm_size]
+    """
     # input_seq =shape [batch_size, seq_max_len]
     # initial_state shape [batch_size, lstm_hidden_state_size]
 
@@ -62,6 +97,13 @@ class Encoder(tf.keras.Model):
 
 class Decoder(tf.keras.Model):
   def __init__(self, lstm_units, embedding_size, vocab_size, attention_type):
+    """
+      Parameters: 
+          lstm_size - number of lstm units
+          embedding_size - size of embedding layer
+          vocab_size - size of vocabulary for output language
+          attention_type - attention type that should be used. Possible types: dot/general/concat  
+    """
     super(Decoder, self).__init__()
 
     self.units = lstm_units
@@ -74,6 +116,19 @@ class Decoder(tf.keras.Model):
     self.W_s = tf.keras.layers.Dense(vocab_size, name="Attenton_W_s")
 
   def call(self, decoder_input, hidden_states, encoder_output, training_mode):
+    """
+      Parameters:
+        decoder_input - tokenized input element of shape [batch_size, 1]
+        hidden_states - hidden states of decoder from last timestep. In case of first call, they are taken form encoder.
+                        Shape 2*[batch_size, lstm_size].
+        encoder_output - outputs from encoder layer of shape [batch_size, seq_max_len, lstm_size]
+        training_mode - are we in training or preidction mode. It`s important for dropouts present in lstm_layer
+      
+      Returns:
+        output_vector - output for given timestep of shape [batch_size, vocab_size]
+        state_h, state_c - hidden states of lstm_layer of shape 2*[batch_size, lstm_size]
+        alignment - attention vector, that can be used to visualize what we`re focusing each timestep. Shape [batch_size, 1, source_len]
+    """
     # decoder_input shape [batch_size, 1]
     # hidden_states shape 2*[batch_size, lstm_size]
     # encoder_output shape [batch_size, seq_max_len, lstm_size]

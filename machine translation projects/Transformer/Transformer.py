@@ -6,11 +6,12 @@ import tensorflow as tf
 
 sys.path.insert(0, r"../utilities")
 sys.path.insert(0, r"../preprocessing")
+sys.path.insert(0, r"../trainers")
 
 from preprocessor import *
 from utils import loss_accuracy_plot
 
-from TransformerTrainer import *
+from trainers.TransformerTrainer import *
 
 def main(args):
     """

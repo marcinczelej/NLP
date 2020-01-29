@@ -49,10 +49,11 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
 
 def feedForwardnetwork(dff, d_model):
   """
-  according to paper dff=2048 and d_model =512
-  but d_model should be same as embedding_size/d_model in MultiHeadAttention
-  ffn(x) = max(0, xW_1 + b+1)W_2 + b_2
-  where max(0, ...) -> relu activation
+    Feed Forward network implementation according to paper:
+    dff=2048 and d_model =512
+    but d_model should be same as embedding_size/d_model in MultiHeadAttention
+    ffn(x) = max(0, xW_1 + b+1)W_2 + b_2
+    where max(0, ...) -> relu activation
   """
   ffNetwork = tf.keras.Sequential()
   ffNetwork.add(tf.keras.layers.Dense(dff, activation="relu"))
@@ -63,9 +64,9 @@ class MultiHeadAttentionLayer(tf.keras.layers.Layer):
   def __init__(self, embedding_size, heads_number, dtype=tf.float32, **kwargs):
     super(MultiHeadAttentionLayer, self).__init__(dtype=tf.float32, **kwargs)
     """
-    return shape : [batch_size, sequence_len, d_model]
-    heads_number - tell how many heads will be processed at same time
-    d_model - model size ; equal to embedding_size
+      return shape : [batch_size, sequence_len, d_model]
+      heads_number - tell how many heads will be processed at same time
+      d_model - model size ; equal to embedding_size
     """
     self.heads_number = heads_number
     self.d_model = embedding_size

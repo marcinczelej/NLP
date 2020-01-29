@@ -5,11 +5,12 @@ import tensorflow as tf
 
 sys.path.insert(0, r"../utilities")
 sys.path.insert(0, r"../preprocessing")
+sys.path.insert(0, r"../trainers")
 
 from preprocessor import *
 from utils import loss_accuracy_plot
 
-from Seq2SeqAttentionTrainer import Seq2SeqAttentionTrainer
+from trainers.Seq2SeqAttentionTrainer import Seq2SeqAttentionTrainer
 
 tf.get_logger().setLevel('WARNING')
 

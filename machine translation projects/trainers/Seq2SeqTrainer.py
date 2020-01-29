@@ -1,10 +1,15 @@
 import numpy as np
 import tensorflow as tf
 
-from Seq2Seqmodel import Encoder, Decoder
+import TrainerBase
+
+sys.path.insert(0, r"../models")
+
+from models.Seq2Seqmodel import Encoder, Decoder
 from utils import makeDatasets, save_to_csv
 
-class Seq2SeqTrainer:
+
+class Seq2SeqTrainer(TrainerBase):
     def __init__(self, batch_size, lstm_size, embedding_size, tokenizers, predict_every):
         """
             Parameters: 
@@ -57,7 +62,7 @@ class Seq2SeqTrainer:
             output_seq.append(word)
         return "".join(output_seq)
 
-    def train(self, train_data, test_data, prediction_data, epochs, restore_checkpoint=False, csv_name="seq2seq_data.csv"):
+    
         """
             Training method that uses distributed training
             
