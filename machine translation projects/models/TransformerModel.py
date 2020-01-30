@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-from layers import *
+from TransformerLayers import *
 
 def loadWeights(transformer_model, checkpointPath):
     ckpt = tf.train.Checkpoint(transformer=transformer_model)

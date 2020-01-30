@@ -1,3 +1,5 @@
+import sys
+
 import numpy as np
 import tensorflow as tf
 
@@ -5,17 +7,17 @@ import TrainerBase
 
 sys.path.insert(0, r"../models")
 
-from models.Seq2Seqmodel import Encoder, Decoder
+from Seq2Seqmodel import Encoder, Decoder
 from utils import makeDatasets, save_to_csv
 
 
-class Seq2SeqTrainer(TrainerBase):
+class Seq2SeqTrainer():
     def __init__(self, batch_size, lstm_size, embedding_size, tokenizers, predict_every):
         """
             Parameters: 
                 batch_size - batch_size of input data,
                 lstm_size - number of lstm units
-                embedding_size - embedding size for wholde model
+                embedding_size - embedding size for whole model
                 tokenizers - two tokenizers for input and output data. Should be in form en_tokenizer, fr_tokenizer
                 predict_every - how often to write prediction during training
         """
@@ -37,9 +39,10 @@ class Seq2SeqTrainer(TrainerBase):
             Parameters:
                 en_sentence - sentence that will be translated
 
-            returns:
+            Returns:
                 translated sentence
         """
+
         tokenized_input_data = self.en_tokenizer.encode(en_sentence)      
         tokenized_input_data = tf.expand_dims(tokenized_input_data, 0)
         initial_states = self.encoder.init_states(1)
@@ -62,7 +65,7 @@ class Seq2SeqTrainer(TrainerBase):
             output_seq.append(word)
         return "".join(output_seq)
 
-    
+    def train(self, train_data, test_data, prediction_data, epochs, restore_checkpoint=False, csv_name="seq2seq_data.csv"):
         """
             Training method that uses distributed training
             
@@ -73,9 +76,9 @@ class Seq2SeqTrainer(TrainerBase):
                 epochs - number of epochs that should be run
                 restore_checkpoint - should we restore last checkpoint and resume training. Defualt set to false.
                 csv_name - name of csv file where losses/accuracies will be saved. default = seq2seq_data.csv.
-                  If restore_checkpoint is set to False, file will be erased and only current run will be present.
+                           If restore_checkpoint is set to False, file will be erased and only current run will be present.
                 
-            retuns:
+            Returns:
                 tuple losses, accuracy where losses = (train_losses, test_losses), accuracy = (train-accuracy, test_accuracy)
         """
         
@@ -102,8 +105,8 @@ class Seq2SeqTrainer(TrainerBase):
 
         with self.strategy.scope():
             self.optimizer = tf.keras.optimizers.Adam(clipnorm=5.0)
-            self.encoder = Encoder(en_vocab_size, self.embedding_size, self.lstm_size)
-            self.decoder = Decoder(fr_vocab_size, self.embedding_size, self.lstm_size)
+            self.encoder = Encoder(self.lstm_size, self.embedding_size, en_vocab_size)
+            self.decoder = Decoder(self.lstm_size, self.embedding_size, fr_vocab_size)
             
             ckpt = tf.train.Checkpoint(encoder=self.encoder,
                                        decoder = self.decoder,

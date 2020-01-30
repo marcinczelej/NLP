@@ -1,3 +1,5 @@
+import sys
+
 import numpy as np
 import tensorflow as tf
 
@@ -5,7 +7,7 @@ import TrainerBase
 
 sys.path.insert(0, r"../models")
 
-from models.TransformerModel import *
+from TransformerModel import *
 from utils import makeDatasets, save_to_csv
 
 class customLearningRate(tf.keras.optimizers.schedules.LearningRateSchedule):
@@ -17,6 +19,7 @@ class customLearningRate(tf.keras.optimizers.schedules.LearningRateSchedule):
       according to paper https://arxiv.org/pdf/1706.03762.pdf
       point 5.3 Optimizer
   """
+
   def __init__(self, warmup_steps, d_model):
     super(customLearningRate, self).__init__()
     self.d_model = tf.cast(d_model, tf.float32)
@@ -27,13 +30,13 @@ class customLearningRate(tf.keras.optimizers.schedules.LearningRateSchedule):
     secondScheduler = step*(self.warmup_steps**-1.5)
     return tf.math.rsqrt(self.d_model)*tf.math.minimum(firstScheduler, secondScheduler)
 
-class TransformerTrainer(TrainerBase):
+class TransformerTrainer():
     def __init__(self, batch_size, num_layers, d_model, dff, num_heads, tokenizers, predict_every):
         """
             Parameters: 
                 batch_size - batch_size of input data,
                 num_layers - number of MHA layers
-                d_model - embedding size for wholde model
+                d_model - embedding size for whole model
                 dff - feed forward network layer size
                 num_heads - heads number
                 tokenizers - two tokenizers for input and output data. Should be in form en_tokenizer, fr_tokenizer
@@ -59,9 +62,10 @@ class TransformerTrainer(TrainerBase):
             parameters:
                 en_sentence - sentence that will be translated
             
-            returns:
+            Returns:
                 translated sentence
         """
+
         output_seq = []
         tokenized_input_data = self.en_tokenizer.encode(en_sentence)      
         tokenized_input_data = tf.expand_dims(tokenized_input_data, 0)
@@ -97,11 +101,11 @@ class TransformerTrainer(TrainerBase):
                 test_data - input data for test step. Should be in form : en_test, fr_test_in, fr_test_out
                 prediction_data - input data for prediction step. Should be in form of: en_predict, fr_predict
                 epochs - number of epochs that should be run
-                restore_checkpoint - should we restore last checkpoint and resume training. Defualt set to false.
+                restore_checkpoint - should we restore last checkpoint and resume training. Default set to false.
                 csv_name - name of csv file where losses/accuracies will be saved. default = transformer_data.csv.
-                  If restore_checkpoint is set to False, file will be erased and only current run will be present.
+                           If restore_checkpoint is set to False, file will be erased and only current run will be present.
                 
-            retuns:
+            Returns:
                 tuple losses, accuracy where losses = (train_losses, test_losses), accuracy = (train-accuracy, test_accuracy)
         """
         

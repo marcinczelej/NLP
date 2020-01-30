@@ -11,7 +11,7 @@ sys.path.insert(0, r"../trainers")
 from preprocessor import *
 from utils import loss_accuracy_plot
 
-from trainers.TransformerTrainer import *
+from TransformerTrainer import TransformerTrainer
 
 def main(args):
     """

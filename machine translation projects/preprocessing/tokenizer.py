@@ -13,9 +13,10 @@ def get_tokenizers(input_data):
             input_data - input datas that are used to build tokenizers. 
                          Should be given in form of dictionary:
                          tokenizer_file_name : data
-        returns:
+        Returns:
             tokenizers - vector of tokenizers
     """
+
     # creating tokenizers
     tokenizers = []
     current_dir = os.path.dirname(os.path.abspath(__file__))

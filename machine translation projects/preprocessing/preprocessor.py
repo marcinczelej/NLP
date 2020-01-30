@@ -19,13 +19,13 @@ def preprocess_data(inputs, outputs, tokenizer_names, shuffle_needed=True):
         4. adding <start> and <end> tokens into train/test data
         5. padding train/test data
         
-        Parametrs:
+        Parameters:
             inputs - data that needs to be translated
             outputs - target translations
             tokenizer_names - names of tokenizer files
             shuffle_needed - should data be shuffled. Default value : True
         
-        returns:
+        Returns:
             train_data - data vector consting preprocessed train data in form: (input, output_in, output_out)
             test_data - data vector consting preprocessed test data in form: (input, output_in, output_out)
             prediction_data - only normalized intput, output datas

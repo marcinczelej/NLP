@@ -1,4 +1,5 @@
 import os
+import sys
 import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
@@ -7,10 +8,10 @@ import TrainerBase
 
 sys.path.insert(0, r"../models")
 
-from models.Seq2SeqAttmodel import Encoder, Decoder
+from Seq2SeqAttmodel import Encoder, Decoder
 from utils import makeDatasets, save_to_csv
 
-class Seq2SeqAttentionTrainer(TrainerBase):
+class Seq2SeqAttentionTrainer():
     def __init__(self, batch_size, lstm_size, embedding_size, tokenizers, predict_every):
         """
             Parameters: 
@@ -38,9 +39,9 @@ class Seq2SeqAttentionTrainer(TrainerBase):
             Parameters:
                 en_sentence - sentence that will be translated
             
-            returns:
+            Returns:
                 translated sentence
-                alingments matrix - attention matrix for given translation
+                alignments matrix - attention matrix for given translation
         """
         tokenized_input_data = self.en_tokenizer.encode(en_sentence)      
         tokenized_input_data = tf.expand_dims(tokenized_input_data, 0)
@@ -85,7 +86,7 @@ class Seq2SeqAttentionTrainer(TrainerBase):
                 csv_name - name of csv file where losses/accuracies will be saved. default = seq2seqAttention_data.csv.
                   If restore_checkpoint is set to False, file will be erased and only current run will be present.
             
-            retuns:
+            Returns:
                 tuple losses, accuracy where losses = (train_losses, test_losses), accuracy = (train-accuracy, test_accuracy)
         """
         

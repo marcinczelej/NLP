@@ -11,7 +11,7 @@ sys.path.insert(0, r"../trainers")
 from preprocessor import *
 from utils import loss_accuracy_plot
 
-from trainers.Seq2SeqTrainer import Seq2SeqTrainer
+from Seq2SeqTrainer import Seq2SeqTrainer
 
 tf.get_logger().setLevel('WARNING')
 
