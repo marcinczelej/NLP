@@ -58,7 +58,7 @@ class LuangAttention(tf.keras.Model):
     return context_vector, alignment_vector
 
 class Encoder(tf.keras.Model):
-  def __init__(self, lstm_units, embedding_size, vocab_size):
+  def __init__(self, lstm_size, embedding_size, vocab_size):
     """
       Parameters: 
           lstm_size - number of lstm units
@@ -68,15 +68,15 @@ class Encoder(tf.keras.Model):
 
     super(Encoder, self).__init__()
 
-    self.units = lstm_units
+    self.units = lstm_size
     self.embedding = tf.keras.layers.Embedding(vocab_size, embedding_size, name="Encoder_embedding")
-    self.lstm_layer = tf.keras.layers.LSTM(units=lstm_units, dropout=0.2, return_sequences=True, return_state=True, name="Encoder_LSTM")
+    self.lstm_layer = tf.keras.layers.LSTM(units=lstm_size, dropout=0.2, return_sequences=True, return_state=True, name="Encoder_LSTM")
 
   def call(self, input_seq, initial_state, training_mode):
     """
       Parameters:
         input_seq - tokenized input sequence of shape [batch_size, seq_max_len]
-        initial_state - initial state of encoder lsts layer hidden states of shape [batch_size, lstm_size].
+        initial_state - initial state of encoder lstm layer hidden states of shape [batch_size, lstm_size].
                         Can be get from init_states method of encoder
         training_mode - are we in training or prediction mode. It`s important for dropouts present in lstm_layer
       
@@ -101,7 +101,7 @@ class Encoder(tf.keras.Model):
             tf.zeros([batch_size, self.units]))
 
 class Decoder(tf.keras.Model):
-  def __init__(self, lstm_units, embedding_size, vocab_size, attention_type):
+  def __init__(self, lstm_size, embedding_size, vocab_size, attention_type):
     """
       Parameters: 
           lstm_size - number of lstm units
@@ -112,13 +112,13 @@ class Decoder(tf.keras.Model):
 
     super(Decoder, self).__init__()
 
-    self.units = lstm_units
+    self.units = lstm_size
     self.embedding_layer = tf.keras.layers.Embedding(vocab_size, embedding_size, name="Decoder_embedding")
-    self.lstm_layer = tf.keras.layers.LSTM(lstm_units, dropout=0.2, return_sequences=True, return_state=True, name="Decoder_lstm")
+    self.lstm_layer = tf.keras.layers.LSTM(lstm_size, dropout=0.2, return_sequences=True, return_state=True, name="Decoder_lstm")
     self.dense_layer = tf.keras.layers.Dense(vocab_size)
-    self.attention = LuangAttention(lstm_units, attention_type)
+    self.attention = LuangAttention(lstm_size, attention_type)
 
-    self.W_c = tf.keras.layers.Dense(lstm_units, activation="tanh", name="Attention_W_c")
+    self.W_c = tf.keras.layers.Dense(lstm_size, activation="tanh", name="Attention_W_c")
     self.W_s = tf.keras.layers.Dense(vocab_size, name="Attenton_W_s")
 
   def call(self, decoder_input, hidden_states, encoder_output, training_mode):
@@ -128,7 +128,7 @@ class Decoder(tf.keras.Model):
         hidden_states - hidden states of decoder from last timestep. In case of first call, they are taken form encoder.
                         Shape 2*[batch_size, lstm_size].
         encoder_output - outputs from encoder layer of shape [batch_size, seq_max_len, lstm_size]
-        training_mode - are we in training or preidction mode. It`s important for dropouts present in lstm_layer
+        training_mode - are we in training or prediction mode. It`s important for dropouts present in lstm_layer
       
       Returns:
         output_vector - output for given timestep of shape [batch_size, vocab_size]
@@ -142,7 +142,7 @@ class Decoder(tf.keras.Model):
     embedded_input = self.embedding_layer(decoder_input, training=training_mode)
     # embedded_input shape [batch_size, 1, embedding_size]
     # lstm_out shape [batch_size, 1, lstm_size]
-    # state_h, state_c shape 2*[batch_szie, lstm_size]
+    # state_h, state_c shape 2*[batch_size, lstm_size]
     lstm_out, state_h, state_c = self.lstm_layer(embedded_input, hidden_states, training=training_mode)
 
     # context shape [batch_size, 1 lstm_size]
