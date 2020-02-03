@@ -4,14 +4,15 @@ import numpy as np
 import tensorflow as tf
 import matplotlib.pyplot as plt
 
-import TrainerBase
+from TrainerBase import BaseTrainer
 
 sys.path.insert(0, r"../models")
+sys.path.insert(0, r"../utilities")
 
 from Seq2SeqAttmodel import Encoder, Decoder
 from utils import makeDatasets, save_to_csv
 
-class Seq2SeqAttentionTrainer():
+class Seq2SeqAttentionTrainer(BaseTrainer):
     def __init__(self, batch_size, lstm_size, embedding_size, tokenizers, predict_every):
         """
             Parameters: 
@@ -119,11 +120,11 @@ class Seq2SeqAttentionTrainer():
         alignments = []
 
         with self.strategy.scope():
-            self.encoder = Encoder(lstm_units=self.lstm_size, 
+            self.encoder = Encoder(lstm_size=self.lstm_size, 
                                    embedding_size=self.embedding_size, 
                                    vocab_size=en_vocab_size)
             
-            self.decoder = Decoder(lstm_units=self.lstm_size, 
+            self.decoder = Decoder(lstm_size=self.lstm_size, 
                                    embedding_size=self.embedding_size, 
                                    vocab_size=fr_vocab_size, 
                                    attention_type=attention_type)

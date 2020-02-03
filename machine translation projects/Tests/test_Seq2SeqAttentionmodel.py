@@ -1,4 +1,7 @@
 import sys
+import unittest
+
+from parameterized import parameterized
 
 import tensorflow as tf
 
@@ -6,21 +9,38 @@ sys.path.insert(0, r"../models")
 
 from Seq2SeqAttmodel import Encoder, Decoder
 
-class TestSeq2SeqAttentionModel:
-    def __init__(self):
+class TestSeq2SeqAttentionModel(unittest.TestCase):
 
-        self.en_vocab_size = 100
-        self.fr_vocab_size = 120
-        self.lstm_size = 128
+    en_vocab_size = 100
+    fr_vocab_size = 120
+    lstm_size = 128
+    en_vocab_size = 100
+    fr_vocab_size = 120
 
-    def test_encoder_decoder_shapes(self, mode, attention_type):
-        print("starting Seq2Seq with training_mode = {} and attention type = {}" .format(mode, attention_type))
+    @parameterized.expand([
+        (True, 1, "dot"),
+        (False, 1, "dot"),
+        (True, 1, "general"),
+        (False, 1, "general"),
+        (True, 1, "concat"),
+        (False, 1, "concat"),
+        (True, 16, "dot"),
+        (False, 16, "dot"),
+        (True, 16, "general"),
+        (False, 16, "general"),
+        (True, 16, "concat"),
+        (False, 16, "concat"),
+    ])
+
+
+    def test_encoder_decoder_shapes(self, mode, batch_size, attention_type):
+        print("starting Seq2Seq with batch_size = {} with training_mode = {} and attention type = {}" \
+            .format(batch_size, mode, attention_type))
         # checks for encoder state
 
         en_vocab_size = 100
         fr_vocab_size = 120
 
-        batch_size = 16
         encoder = Encoder(lstm_size=self.lstm_size,
                           embedding_size=512,
                           vocab_size=self.en_vocab_size)
@@ -51,14 +71,3 @@ class TestSeq2SeqAttentionModel:
         assert(de_state_h.shape == (batch_size, self.lstm_size))
         assert(de_state_c.shape == (batch_size, self.lstm_size))
         assert(alingment_vector.shape == (batch_size, 1, source_input.shape[1]))
-
-testClass = TestSeq2SeqAttentionModel()
-
-testClass.test_encoder_decoder_shapes(mode=True, attention_type="dot")
-testClass.test_encoder_decoder_shapes(mode=False, attention_type="dot")
-
-testClass.test_encoder_decoder_shapes(mode=True, attention_type="general")
-testClass.test_encoder_decoder_shapes(mode=False, attention_type="general")
-
-testClass.test_encoder_decoder_shapes(mode=True, attention_type="concat")
-testClass.test_encoder_decoder_shapes(mode=False, attention_type="concat")

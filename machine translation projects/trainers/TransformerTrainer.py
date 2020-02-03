@@ -3,9 +3,10 @@ import sys
 import numpy as np
 import tensorflow as tf
 
-import TrainerBase
+from TrainerBase import BaseTrainer
 
 sys.path.insert(0, r"../models")
+sys.path.insert(0, r"../utilities")
 
 from TransformerModel import *
 from utils import makeDatasets, save_to_csv
@@ -30,7 +31,7 @@ class customLearningRate(tf.keras.optimizers.schedules.LearningRateSchedule):
     secondScheduler = step*(self.warmup_steps**-1.5)
     return tf.math.rsqrt(self.d_model)*tf.math.minimum(firstScheduler, secondScheduler)
 
-class TransformerTrainer():
+class TransformerTrainer(BaseTrainer):
     def __init__(self, batch_size, num_layers, d_model, dff, num_heads, tokenizers, predict_every):
         """
             Parameters: 
@@ -43,7 +44,7 @@ class TransformerTrainer():
                 predict_every - how often to write prediction during training
                 checkpoint_path is set to "./checkpoints/train" by default
         """
-     
+
         self.en_tokenizer, self.fr_tokenizer = tokenizers
         self.batch_size = batch_size
         self.num_layers = num_layers

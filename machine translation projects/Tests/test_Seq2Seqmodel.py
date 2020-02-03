@@ -1,4 +1,6 @@
+import unittest
 import sys
+from parameterized import parameterized
 
 import tensorflow as tf
 
@@ -6,22 +8,24 @@ sys.path.insert(0, r"../models")
 
 from Seq2Seqmodel import Encoder, Decoder
 
-class TestSeq2SeqModel:
-    def __init__(self):
+class Seq2SeqModelTest(unittest.TestCase):
+    en_vocab_size = 100
+    fr_vocab_size = 120
+    lstm_size = 128
+    en_vocab_size = 100
+    fr_vocab_size = 120
 
-        self.en_vocab_size = 100
-        self.fr_vocab_size = 120
-        self.lstm_size = 128
+    @parameterized.expand([
+        (True, 1),
+        (False, 1),
+        (True, 16),
+        (False, 16),
+    ])
 
-    def test_encoder_decoder_shapes(self, mode):
+    def test_encoder_decoder_shapes(self, mode, batch_size):
         print("starting Seq2Seq with training_mode = ", mode)
         # checks for encoder state
 
-        en_vocab_size = 100
-        fr_vocab_size = 120
-
-
-        batch_size = 16
         encoder = Encoder(lstm_units=self.lstm_size,
                           embedding_size=512,
                           vocab_size=self.en_vocab_size)
@@ -49,8 +53,3 @@ class TestSeq2SeqModel:
         assert(decoder_output.shape == (*decoder_input.shape, self.fr_vocab_size))
         assert(de_state_h.shape == (batch_size, self.lstm_size))
         assert(de_state_c.shape == (batch_size, self.lstm_size))
-
-testClass = TestSeq2SeqModel()
-
-testClass.test_encoder_decoder_shapes(mode=True)
-testClass.test_encoder_decoder_shapes(mode=False)

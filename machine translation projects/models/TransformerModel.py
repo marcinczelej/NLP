@@ -53,6 +53,7 @@ class Encoder(tf.keras.Model):
   ------------------------------------------------------
   - Encoder output 
   """
+  
   def __init__(self, embedding_size, max_sentence_len, vocab_size, blocks_amount, heads_number, dff):
     super(Encoder, self).__init__()
 

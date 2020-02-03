@@ -3,15 +3,16 @@ import sys
 import numpy as np
 import tensorflow as tf
 
-import TrainerBase
+from TrainerBase import BaseTrainer
 
 sys.path.insert(0, r"../models")
+sys.path.insert(0, r"../utilities")
 
 from Seq2Seqmodel import Encoder, Decoder
 from utils import makeDatasets, save_to_csv
 
 
-class Seq2SeqTrainer():
+class Seq2SeqTrainer(BaseTrainer):
     def __init__(self, batch_size, lstm_size, embedding_size, tokenizers, predict_every):
         """
             Parameters: 

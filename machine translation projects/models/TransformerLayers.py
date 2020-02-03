@@ -118,23 +118,23 @@ class MultiHeadAttentionLayer(tf.keras.layers.Layer):
 
   def call(self, q, k, v, sequence_mask):
     """
-    q shape [batch_size, sequence_len, d_model]
-    k shape [batch_size, sequence_len, d_model]
-    v shape [batch_size, sequence_len, d_model]
+      q shape [batch_size, sequence_len, d_model]
+      k shape [batch_size, sequence_len, d_model]
+      v shape [batch_size, sequence_len, d_model]
 
-    after first operations shapes are the same
-    next we have to split d_model into heads_number of subbatches
-    new shape after reshape only should be : [batch_size, sequence_len, heads_number, d_model//heads_number]
-    next shape should be transposed to : [batch_size, heads_number, sequence_len, d_model//heads_number]
-    where :
-      new_d_model = d_model/heads_number
-    
-    next make scaled dot-product attention on resulting q,k,v
+      after first operations shapes are the same
+      next we have to split d_model into heads_number of subbatches
+      new shape after reshape only should be : [batch_size, sequence_len, heads_number, d_model//heads_number]
+      next shape should be transposed to : [batch_size, heads_number, sequence_len, d_model//heads_number]
+      where :
+        new_d_model = d_model/heads_number
+      
+      next make scaled dot-product attention on resulting q,k,v
 
-    next concat returning data to get shape : [batch_size, sequence_len, d_model]
-    in order to do this we have to transpose context_vector to get [batch_size, sequence_len, heads_number, d_model//heads_number]
+      next concat returning data to get shape : [batch_size, sequence_len, d_model]
+      in order to do this we have to transpose context_vector to get [batch_size, sequence_len, heads_number, d_model//heads_number]
 
-    next put it throug dense layer (d_model) in order to get output
+      next put it throug dense layer (d_model) in order to get output
     """
     #print("q shape {}\nk shape {}\n v shape {}" .format(q.shape, k.shape, v.shape))
     q = self.w_q(q)
@@ -159,6 +159,14 @@ class MultiHeadAttentionLayer(tf.keras.layers.Layer):
     
 class EncoderLayer(tf.keras.layers.Layer):
   def __init__(self, embedding_size, heads_number, dff, dtype=tf.float32, **kwargs):
+    """
+      Parameters:
+        embedding_size - embeddint size ( d_model )
+        heads_number - number of attention heads
+        dff - dimension of first dense layer for feed forward neural network
+      
+    """
+
     super(EncoderLayer, self).__init__(dtype, **kwargs)
 
     self.d_model = embedding_size
@@ -167,25 +175,34 @@ class EncoderLayer(tf.keras.layers.Layer):
     self.normalizationFirst = tf.keras.layers.LayerNormalization(epsilon=1e-6)
     self.normalizationSecond = tf.keras.layers.LayerNormalization(epsilon=1e-6)
 
-    self.dropoutFirst = tf.keras.layers.Dropout(0.2)
-    self.dropoutSecond = tf.keras.layers.Dropout(0.2)
+    self.dropout = tf.keras.layers.Dropout(0.2)
 
     self.ffNetwork = feedForwardnetwork(dff, self.d_model)
 
   def call(self, encoder_input, mask, training_enabled):
+    """
+      Parameters:
+        encoder_input - encoder layer input data of shape [batch_size, max_sentence_len, embedding_size]
+        mask - mask that will be passed to MultiheadAttention layer, that is used for scaledDotAttention
+        training_enabled - are we in training or prediction mode. It`s important for dropouts present in lstm_layer
+      
+      Returns:
+        feedforward network output - of shape [batch_size, seq_max_len, embedding_size]
+    """
+
     # shortcut_data shape [batch_size, max_sentence_len, embedding_size]
     shortcut_data = encoder_input
 
     # mhatt_output shape [batch_size, max_sentence_len, embedding_size]
     mhatt_output = self.multiHeadAttention(encoder_input, encoder_input, encoder_input, mask)
-    mhatt_output = self.dropoutFirst(mhatt_output, training=training_enabled)
+    mhatt_output = self.dropout(mhatt_output, training=training_enabled)
     mhatt_output += shortcut_data
     mhatt_output = self.normalizationFirst(mhatt_output)
 
     shortcut_data = mhatt_output
 
     ffNet_output = self.ffNetwork(mhatt_output)
-    ffNet_output = self.dropoutSecond(ffNet_output, training=training_enabled)
+    ffNet_output = self.dropout(ffNet_output, training=training_enabled)
     ffNet_output += shortcut_data
     ffNet_output = self.normalizationSecond(ffNet_output)
 
@@ -193,6 +210,13 @@ class EncoderLayer(tf.keras.layers.Layer):
 
 class DecoderLayer(tf.keras.layers.Layer):
   def __init__(self, embedding_size, heads_number, dff, dtype=tf.float32, **kwargs):
+    """
+      Parameters:
+        embedding_size - embeddint size ( d_model )
+        heads_number - number of attention heads
+        dff - dimension of first dense layer for feed forward neural network
+    """
+
     super(DecoderLayer, self).__init__(dtype, **kwargs)
 
     self.d_model = embedding_size
@@ -203,19 +227,30 @@ class DecoderLayer(tf.keras.layers.Layer):
     self.normalizationSecond = tf.keras.layers.LayerNormalization(epsilon=1e-6)
     self.normalizationThird = tf.keras.layers.LayerNormalization(epsilon=1e-6)
 
-    self.dropoutFirst = tf.keras.layers.Dropout(0.2)
-    self.dropoutSecond = tf.keras.layers.Dropout(0.2)
-    self.dropoutThird = tf.keras.layers.Dropout(0.2)
+    self.dropout = tf.keras.layers.Dropout(0.2)
+
 
     self.ffNetwork = feedForwardnetwork(dff, self.d_model)
 
   def call(self, decoder_input, encoder_output, pad_mask, elements_mask, training_enabled):
+    """
+      Parameters:
+        decoder_input - input data of decoder of shape [batch_szie, max_sentence_len, embedding_size]
+        encoder_output - output of shape [batch_size, seq_max_len, embedding_size]
+        pad_mask - mask that is used for padding tokens masking
+        elements_mask - mask that`s used for masking elements past current one
+        training_enabled - are we in training or prediction mode. It`s important for dropouts present in lstm_layer
+      
+      Returns:
+        feedforward network output - of shape [batch_size, seq_max_len, embedding_size]
+    """
+
     # shortcut_data shape [batch_szie, max_sentence_len, embedding_size]
     shortcut_data = decoder_input
       
     # mhatt_output shape [batch_size, max_sentence_len, embedding_size]
     mhatt_output = self.multiHeadAttentionFirst(decoder_input, decoder_input, decoder_input, elements_mask)
-    mhatt_output = self.dropoutFirst(mhatt_output, training=training_enabled)
+    mhatt_output = self.dropout(mhatt_output, training=training_enabled)
     # add & Norm
     mhatt_output += shortcut_data
     mhatt_output = self.normalizationFirst(mhatt_output)
@@ -225,13 +260,13 @@ class DecoderLayer(tf.keras.layers.Layer):
     #print("encoder_output ", encoder_output.shape)
     #print("mhatt_output ", mhatt_output.shape)
     mhatt_output2 = self.multiHeadAttentionSecond(mhatt_output, encoder_output, encoder_output, pad_mask)
-    mhatt_output2 = self.dropoutSecond(mhatt_output2, training=training_enabled)
+    mhatt_output2 = self.dropout(mhatt_output2, training=training_enabled)
     mhatt_output2 += shortcut_data
     mhatt_output2 = self.normalizationSecond(mhatt_output2)
 
     shortcut_data = mhatt_output2
     ffn_output = self.ffNetwork(mhatt_output2)
-    ffn_output = self.dropoutThird(ffn_output, training=training_enabled)
+    ffn_output = self.dropout(ffn_output, training=training_enabled)
     ffn_output += shortcut_data
     ffNet_output = self.normalizationThird(ffn_output)
 
