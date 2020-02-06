@@ -17,7 +17,7 @@ def loadWeights(transformer_model, checkpointPath):
 def makeSequenceMask(seq_len):
   """
   mask should be size [1, 1, seq_len, seq_len]
-  first two sizes are batch_szie, num_heads to make this matrix broadcastable
+  first two sizes are batch_size, num_heads to make this matrix broadcastable
   it should be in form 
   [
     [0, 1, 1, 1]
@@ -141,7 +141,7 @@ class Transformer(tf.keras.models.Model):
   - Dense
 
    transformer_out shape = [batch_size, output_seq_len, output_vocab_size]
-   default trainng_enabled == False
+   default training_enabled == False
   """
   def __init__(self,
                embedding_size,

@@ -176,7 +176,6 @@ class TransformerTrainer(BaseTrainer):
           def train_step(input_data, real_data_in, real_data_out):
               encoder_pad_mask = makePaddingMask(input_data)
               elements_mask = makeSequenceMask(real_data_in.shape[1])
-              tf.print("               adsadadasdadd       ", elements_mask.shape)
               with tf.GradientTape() as tape:
                 predicted_data = self.transformer_model(
                                                 input_data,
