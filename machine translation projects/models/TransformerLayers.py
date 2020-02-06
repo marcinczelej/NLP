@@ -37,8 +37,8 @@ class PositionalEncodingLayer(tf.keras.layers.Layer):
       input_shape = tf.shape(inputs)
       return inputs + self.PE[:, :input_shape[-2], :]
 
-    It has to be that way becuase we need to be able to get positional encoding for different lenght 
-    for encoder and decoder, when we don`t know max lenght. SO we have to do encoding with bigger buffer
+    It has to be that way because we need to be able to get positional encoding for different length 
+    for encoder and decoder, when we don`t know max length. SO we have to do encoding with bigger buffer
     and take what we need only.
 
     max_sentence_len in should be bigger or equal as longest input we predict we can get
@@ -134,7 +134,7 @@ class MultiHeadAttentionLayer(tf.keras.layers.Layer):
       next concat returning data to get shape : [batch_size, sequence_len, d_model]
       in order to do this we have to transpose context_vector to get [batch_size, sequence_len, heads_number, d_model//heads_number]
 
-      next put it throug dense layer (d_model) in order to get output
+      next put it through dense layer (d_model) in order to get output [batch_size, sequence_len, d_model]
     """
     #print("q shape {}\nk shape {}\n v shape {}" .format(q.shape, k.shape, v.shape))
     q = self.w_q(q)
@@ -182,18 +182,18 @@ class EncoderLayer(tf.keras.layers.Layer):
   def call(self, encoder_input, mask, training_enabled):
     """
       Parameters:
-        encoder_input - encoder layer input data of shape [batch_size, max_sentence_len, embedding_size]
+        encoder_input - encoder layer input data of shape [batch_size, input_seq_len, embedding_size]
         mask - mask that will be passed to MultiheadAttention layer, that is used for scaledDotAttention
         training_enabled - are we in training or prediction mode. It`s important for dropouts present in lstm_layer
       
       Returns:
-        feedforward network output - of shape [batch_size, seq_max_len, embedding_size]
+        feedforward network output - of shape [batch_size, input_seq_len, embedding_size]
     """
 
-    # shortcut_data shape [batch_size, max_sentence_len, embedding_size]
+    # shortcut_data shape [batch_size, sentence_len, embedding_size]
     shortcut_data = encoder_input
 
-    # mhatt_output shape [batch_size, max_sentence_len, embedding_size]
+    # mhatt_output shape [batch_size, sentence_len, embedding_size]
     mhatt_output = self.multiHeadAttention(encoder_input, encoder_input, encoder_input, mask)
     mhatt_output = self.dropout(mhatt_output, training=training_enabled)
     mhatt_output += shortcut_data
@@ -235,20 +235,20 @@ class DecoderLayer(tf.keras.layers.Layer):
   def call(self, decoder_input, encoder_output, pad_mask, elements_mask, training_enabled):
     """
       Parameters:
-        decoder_input - input data of decoder of shape [batch_szie, max_sentence_len, embedding_size]
-        encoder_output - output of shape [batch_size, seq_max_len, embedding_size]
+        decoder_input - input data of decoder of shape [batch_szie, output_seq_len, embedding_size]
+        encoder_output - output of shape [batch_size, input_seq_len, embedding_size]
         pad_mask - mask that is used for padding tokens masking
         elements_mask - mask that`s used for masking elements past current one
         training_enabled - are we in training or prediction mode. It`s important for dropouts present in lstm_layer
       
       Returns:
-        feedforward network output - of shape [batch_size, seq_max_len, embedding_size]
+        feedforward network output - of shape [batch_size, output_seq_len, embedding_size]
     """
 
-    # shortcut_data shape [batch_szie, max_sentence_len, embedding_size]
+    # shortcut_data shape [batch_size, output_seq_len, embedding_size]
     shortcut_data = decoder_input
       
-    # mhatt_output shape [batch_size, max_sentence_len, embedding_size]
+    # mhatt_output shape [batch_size, output_seq_len, embedding_size]
     mhatt_output = self.multiHeadAttentionFirst(decoder_input, decoder_input, decoder_input, elements_mask)
     mhatt_output = self.dropout(mhatt_output, training=training_enabled)
     # add & Norm
