@@ -56,29 +56,47 @@ No now when we have information about shapes it is easy to implement:
 
 ```python
 class Encoder(tf.keras.Model):
-  def __init__(self, vocab_size, embedding_size, units):
+  def __init__(self, lstm_size, embedding_size, vocab_size):
+    """
+      Parameters: 
+          lstm_size - number of lstm units
+          embedding_size - size of embedding layer
+          vocab_size - size of vocabulary for input language
+    """
+
     super(Encoder, self).__init__()
 
-    self.units = units
-    self.embeding_layer = tf.keras.layers.Embedding(vocab_size, embedding_size, mask_zero=True, trainable=True)
-    self.lstm_layer = tf.keras.layers.LSTM(units, dropout=0.2, return_sequences=True, return_state=True)
+    self.units = lstm_size
+    self.embedding = tf.keras.layers.Embedding(vocab_size, embedding_size, name="Encoder_embedding")
+    self.lstm_layer = tf.keras.layers.LSTM(units=lstm_size, dropout=0.2, return_sequences=True, return_state=True, name="Encoder_LSTM")
+
+  def call(self, input_seq, initial_state, training_mode):
+    """
+      Parameters:
+        input_seq - tokenized input sequence of shape [batch_size, seq_max_len]
+        initial_state - initial state of encoder lstm layer hidden states of shape [batch_size, lstm_size].
+                        Can be get from init_states method of encoder
+        training_mode - are we in training or prediction mode. It`s important for dropouts present in lstm_layer
+      
+      Returns:
+        encoder_out - encoder output states for each timestep of shape [batch_size, seq_max_len, lstm_size]
+        state_h, state_c - hidden states of lstm_layer of shape 2*[batch_size, lstm_size]
+    """
+
+    # input_seq =shape [batch_size, seq_max_len]
+    # initial_state shape [batch_size, lstm_hidden_state_size]
+
+    # embedding shape [batch_size, seq_max_len, embedding_size]
+    embedded_input = self.embedding(input_seq, training=training_mode)
+    #encoder output shape [batch_size, seq_max_len, lstm_size]
+    # state_h, state_c shape 2*[batch_size, lstm_size]
+    encoder_out, state_h, state_c = self.lstm_layer(inputs=embedded_input, initial_state=initial_state, training=training_mode)
+
+    return encoder_out, state_h, state_c
   
-  def call(self, sequences, lstm_states, training_mode):
-    # sequences shape = [batch_size, seq_max_len]
-    # lstm_states = [batch_size, lstm_size] x 2
-    # encoder_embedded shape = [batch_size, seq_max_len, embedding_size]
-    # output shape = [batch_size, seq_max_len, lstm_size]
-    # state_h, state_c shape = [batch_size, lstm_size] x 2
-
-    encoder_embedded = self.embeding_layer(sequences, training=training_mode)
-    #print("encoder_embedded = ", encoder_embedded.shape)
-    output, state_h, state_c = self.lstm_layer(encoder_embedded, initial_state=lstm_states, training=training_mode)
-
-    return output, state_h, state_c
-
   def init_states(self, batch_size):
-        return (tf.zeros([batch_size, self.units]),
-                tf.zeros([batch_size, self.units]))
+    return (tf.zeros([batch_size, self.units]),
+            tf.zeros([batch_size, self.units]))
 ```
 
 Because we need initial hidden states for encoder, there is method init_states(...) added. It returns properly shaped hidden states. In case of using GRU layer, there will be only one hidden state , instead of two.
@@ -130,15 +148,41 @@ Whole attention calculations are done with following class:
 
 ```python
 class LuangAttention(tf.keras.Model):
-def __init__(self, lstm_size, attention_type):
+  """
+    Class that implements LuangAttention
+      - uses current decoder output as input to calculate alligment vector
+      - score = h_t_trans*W_a*h_s
+      - h_t - decoder hideden_state
+      - h_s - encoder_output
+      - context_vector = softmax(score)
+  """
+
+  def __init__(self, lstm_size, attention_type):
+    """
+      Parameters: 
+          lstm_size - number of lstm units
+          attention_type - attention type that should be used. Possible types: dot/general/concat  
+    """
+
     super(LuangAttention, self).__init__()
 
     self.W_a = tf.keras.layers.Dense(lstm_size, name="LuangAttention_W_a")
     self.W_a_tanh = tf.keras.layers.Dense(lstm_size, activation="tanh", name="LuangAttention_W_a_tanh")
     self.v_a = tf.keras.layers.Dense(1)
     self.type = attention_type
+  
+  def call(self, decoder_output, encoder_output):
+    """
+      Method that calculates Attention vectors
+      Parameters:
+        decoder_output - last output of decoder or starting token for first iteration. Should be of shape:
+                          [batch_size, 1, lsts_size]
+        encoder_output - hidden states of encoder. Should be of shape: [batch_size, input_seq_max_len, lstm_size]
+      Returns:
+        context_vector - vector that will be used to calcualte final output of ecoder. Shape [batch_size, 1, lstm_size]
+        alignment_vector - vector represents what attention is focusing during given timestep. Shape [batch_size, 1, lstm_size]
+    """
 
-def call(self, decoder_output, encoder_output):
     # encoder_output shape [batch_size, seq_max_len, hidden_units_of_encoder]
     # decoder_output shape [batch_size, 1, hidden_units of decoder]
     # score shape [batch_size, 1, seq_max_len]
@@ -191,26 +235,48 @@ And corresponding code with shapes as comment:
 
 ```python
 class Decoder(tf.keras.Model):
-  def __init__(self, lstm_units, embedding_size, vocab_size, attention_type):
+  def __init__(self, lstm_size, embedding_size, vocab_size, attention_type):
+    """
+      Parameters: 
+          lstm_size - number of lstm units
+          embedding_size - size of embedding layer
+          vocab_size - size of vocabulary for output language
+          attention_type - attention type that should be used. Possible types: dot/general/concat  
+    """
+
     super(Decoder, self).__init__()
 
-    self.units = lstm_units
+    self.units = lstm_size
     self.embedding_layer = tf.keras.layers.Embedding(vocab_size, embedding_size, name="Decoder_embedding")
-    self.lstm_layer = tf.keras.layers.LSTM(lstm_units, dropout=0.2, return_sequences=True, return_state=True, name="Decoder_lstm")
+    self.lstm_layer = tf.keras.layers.LSTM(lstm_size, dropout=0.2, return_sequences=True, return_state=True, name="Decoder_lstm")
     self.dense_layer = tf.keras.layers.Dense(vocab_size)
-    self.attention = LuangAttention(lstm_units, attention_type)
+    self.attention = LuangAttention(lstm_size, attention_type)
 
-    self.W_c = tf.keras.layers.Dense(lstm_units, activation="tanh", name="Attention_W_c")
-    self.W_s = tf.keras.layers.Dense(vocab_size, name="Attention_W_s")
+    self.W_c = tf.keras.layers.Dense(lstm_size, activation="tanh", name="Attention_W_c")
+    self.W_s = tf.keras.layers.Dense(vocab_size, name="Attenton_W_s")
 
   def call(self, decoder_input, hidden_states, encoder_output, training_mode):
+    """
+      Parameters:
+        decoder_input - tokenized input element of shape [batch_size, 1]
+        hidden_states - hidden states of decoder from last timestep. In case of first call, they are taken form encoder.
+                        Shape 2*[batch_size, lstm_size].
+        encoder_output - outputs from encoder layer of shape [batch_size, seq_max_len, lstm_size]
+        training_mode - are we in training or prediction mode. It`s important for dropouts present in lstm_layer
+      
+      Returns:
+        output_vector - output for given timestep of shape [batch_size, vocab_size]
+        state_h, state_c - hidden states of lstm_layer of shape 2*[batch_size, lstm_size]
+        alignment - attention vector, that can be used to visualize what we`re focusing each timestep. Shape [batch_size, 1, source_len]
+    """
+    
     # decoder_input shape [batch_size, 1]
     # hidden_states shape 2*[batch_size, lstm_size]
     # encoder_output shape [batch_size, seq_max_len, lstm_size]
     embedded_input = self.embedding_layer(decoder_input, training=training_mode)
     # embedded_input shape [batch_size, 1, embedding_size]
     # lstm_out shape [batch_size, 1, lstm_size]
-    # state_h, state_c shape 2*[batch_szie, lstm_size]
+    # state_h, state_c shape 2*[batch_size, lstm_size]
     lstm_out, state_h, state_c = self.lstm_layer(embedded_input, hidden_states, training=training_mode)
 
     # context shape [batch_size, 1 lstm_size]
@@ -226,12 +292,12 @@ class Decoder(tf.keras.Model):
     # conversion to vocabulary prob
     # output_vector shape [batch_size, vocab_size]
     output_vector = self.W_s(output_vector)
-    return output_vector, state_h, state_c
+    return output_vector, state_h, state_c, alignment
 ```
 
-Both attention layer, encoder and decoder code can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/Seq2SeqAttention/model.py)
+Both attention layer, encoder and decoder code can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/models/Seq2SeqAttmodel.py)
 
-### Input Preprocessing
+## Input Preprocessing
 
 Preprocessing is  process that has to be done before we can feed data into our model. It consists of few parts:
 
@@ -260,54 +326,146 @@ Preprocessing is  process that has to be done before we can feed data into our m
 - **padding and tokenization**
 
     Sentences are zero padded, so they will be same length, and tokenized into vectors of tokens (integers) with proper Tokenizer.
-    In this case build in tensorflow tokenizer is use, but one can use nltk tokenizer, scipy tokenizer etc..
-    We have to save both input and output language tokenizers to de-tokenize sentences later in prediction phase.
+    In this caseSubwordText tokenizer is use, but one can use nltk tokenizer, scipy tokenizer etc..
+    We have to save both input and output language tokenizers to de-tokenize sentences later in prediction phase. Also if there is no saved tokenizer files (.subword extension) we save it for future use.
 
     ```python
-    def preprocessSeq(texts, tokenizer):
-        texts = tokenizer.texts_to_sequences(texts)
+    def get_tokenizers(input_data):
+    """
+        Method that returns proper tokenizers for given input data
+        If there is proper tokenizer file, given as dictionary key,
+        this method will load tokenizer from it. If not it will
+        create new tokenizer and save it to proper file in this directory
+        
+        Parameters:
+            input_data - input datas that are used to build tokenizers. 
+                         Should be given in form of dictionary:
+                         tokenizer_file_name : data
+        Returns:
+            tokenizers - vector of tokenizers
+    """
 
-        return pad_sequences(texts, padding='post')
+    # creating tokenizers
+    tokenizers = []
+    current_dir = os.path.dirname(os.path.abspath(__file__))
 
-    def tokenizeInput(input_data, tokenizer):
-        output_data = []
-        for data in input_data:
-            tokenizer.fit_on_texts(data)
+    for file_name, data in input_data.items():
+        file_name = current_dir + "/" + file_name
+        if pathlib.Path(file_name + ".subwords").exists():
+            print("loading tokenizer from file ", file_name + ".subwords")
+            tokenizer=tfds.features.text.SubwordTextEncoder.load_from_file(file_name)
+        else:
+            print("creating new tokenizer")
+            tokenizer = tfds.features.text.SubwordTextEncoder.build_from_corpus(
+                (text for text in data), target_vocab_size=2**13)
+            tokenizer.save_to_file(file_name)
+        tokenizers.append(tokenizer)
 
-        for data in input_data:
-            output_data.append(preprocessSeq(data, tokenizer))
-
-        return output_data
+    return tokenizers
     ```
 
-subroutines can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/utilities/utils.py)
+    subroutines for getting Tokenizer can be found here [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/preprocessing/tokenizer.py)
 
-whole preprocess routine can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/Seq2SeqAttention/main.py) plus code is pasted below:
+    whole preprocess routine can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/preprocessing/preprocessor.py) plus code is pasted below:
 
-```python
-en_lines = [normalize(line) for line in en_lines]
-fr_lines = [normalize(line) for line in fr_lines]
 
-en_train, en_test, fr_train, fr_test = train_test_split(en_lines, fr_lines, shuffle=True, test_size=0.1)
+    ```python
+    def preprocess_data(inputs, outputs, tokenizer_names, shuffle_needed=True):
+    """
+        Method for input and output data preprocessing.
+        It consist of following steps:
+        1. shuffling, if shuffle set to True. Default value : True
+        1. normalizing data
+        2. splitting data into train/test
+        3. creating/loading tokenizers
+        4. adding <start> and <end> tokens into train/test data
+        5. padding train/test data
+        
+        Parametrs:
+            inputs - data that needs to be translated
+            outputs - target translations
+            tokenizer_names - names of tokenizer files
+            shuffle_needed - should data be shuffled. Default value : True
+        
+        returns:
+            train_data - data vector consting preprocessed train data in form: (input, output_in, output_out)
+            test_data - data vector consting preprocessed test data in form: (input, output_in, output_out)
+            prediction_data - only normalized intput, output datas
+            tokenizers - tokenizers for input and output languages
+    """
+    
+    input_tokenizer_name, output_tokenizer_name = tokenizer_names
+    
+    input_data = copy.deepcopy(inputs)
+    output_data = copy.deepcopy(outputs)
+    
+    if shuffle_needed:
+        input_data, output_data = shuffle(input_data, output_data)
+    
+    input_data = [normalize(line) for line in input_data]
+    output_data = [normalize(line) for line in output_data]
 
-en_lines = en_test
-fr_lines = fr_test
+    input_train, intput_test, output_train, output_test = train_test_split(input_data, output_data, shuffle=True, test_size=0.1)
 
-fr_train_in = ['<start> ' + line for line in fr_train]
-fr_train_out = [line + ' <end>' for line in fr_train]
+    intput_lines = intput_test
+    output_izer_data = {input_tokenizer_name : input_train,
+                 output_tokenizer_name : output_train}
+    input_tokenizer, output_tokenizer = get_tokenizers(tokenizer_data)
+    print("Tokenizers created\n  {} vocab size {}\n  {} vocab size {}" \
+      .format(input_tokenizer_name, input_tokenizer.vocab_size, \
+              output_tokenizer_name, output_tokenizer.vocab_size))
+    
+    # train dataset
+    output_train_in = [[output_tokenizer.vocab_size] + output_tokenizer.encode(line) for line in output_train]
+    output_train_out = [output_tokenizer.encode(line) + [output_tokenizer.vocab_size+1] for line in output_train]
+t_tokenizer.vocab_size+1] for line in output_train]
 
-fr_test_in = ['<start> ' + line for line in fr_test]
-fr_test_out = [line + ' <end>' for line in fr_test]
+    output_train_in = pad_sequences(output_train_in, padding='post')
+    output_train_out = pad_sequences(output_train_out, padding='post')
 
-fr_tokenizer = Tokenizer(filters='')
-en_tokenizer = Tokenizer(filters='')
+    # test dataset
+    output_test_in = [[output_tokenizer.vocab_size] + output_tokenizer.encode(line) for line in output_test]
+    output_test_out = [output_tokenizer.encode(line) + [output_tokenizer.vocab_size+1] for line in output_test]
 
-input_data = [fr_train_in, fr_train_out, fr_test_in, fr_test_out, fr_test, fr_train]
-fr_train_in, fr_train_out, fr_test_in, fr_test_out, fr_test, fr_train = tokenizeInput(input_data,
-                                                                                      fr_tokenizer)
-input_data = [en_train, en_test]
-en_train, en_test = tokenizeInput(input_data, en_tokenizer)
-```
+    output_test_in = pad_sequences(output_test_in, padding='post')
+    output_test_out = pad_sequences(output_test_out, padding='post')
+
+    input_train = [input_tokenizer.encode(line) for line in input_train]
+    intput_test = [input_tokenizer.encode(line) for line in intput_test]
+
+    input_train = pad_sequences(input_train, padding='post')
+    intput_test = pad_sequences(intput_test, padding='post')
+
+    train_data = [input_train, output_train_in, output_train_out]
+    test_data = [intput_test, output_test_in, output_test_out]
+    prediction_data = [intput_lines, output_lines]
+    tokenizers = [input_tokenizer, output_tokenizer]
+
+    return train_data, test_data, prediction_data, tokenizers
+    ```
+    output_train_in = pad_sequences(output_train_in, padding='post')
+    output_train_out = pad_sequences(output_train_out, padding='post')
+
+    # test dataset
+    output_test_in = [[output_tokenizer.vocab_size] + output_tokenizer.encode(line) for line in output_test]
+    output_test_out = [output_tokenizer.encode(line) + [output_tokenizer.vocab_size+1] for line in output_test]
+
+    output_test_in = pad_sequences(output_test_in, padding='post')
+    output_test_out = pad_sequences(output_test_out, padding='post')
+
+    input_train = [input_tokenizer.encode(line) for line in input_train]
+    intput_test = [input_tokenizer.encode(line) for line in intput_test]
+
+    input_train = pad_sequences(input_train, padding='post')
+    intput_test = pad_sequences(intput_test, padding='post')
+
+    train_data = [input_train, output_train_in, output_train_out]
+    test_data = [intput_test, output_test_in, output_test_out]
+    prediction_data = [intput_lines, output_lines]
+    tokenizers = [input_tokenizer, output_tokenizer]
+
+    return train_data, test_data, prediction_data, tokenizers
+    -```
 
 ### training loop
 

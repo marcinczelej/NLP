@@ -100,7 +100,7 @@ class Decoder(tf.keras.Model):
   def call(self, sequences, lstm_states, training_mode):
     # sequences shape = [batch_size, seq_max_len]
     # embedding shape = [batch_size, seq_max_len, embedding_size]
-    # output shape = [batch_szie, seq_max_len, lstm_size]
+    # output shape = [batch_size, seq_max_len, lstm_size]
     # state_h, state_c = [batch_size, lstm_size] x2
     # dense shape = [batch_size, seq_max_len, vocab_size]
     
@@ -109,7 +109,7 @@ class Decoder(tf.keras.Model):
     return self.dense_layer(lstm_output), state_h, state_c
 ```
 
-Both encoder and decoder code plus small shapes test can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/Seq2Seq/model.py)
+Both encoder and decoder code plus small shapes test can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/models/Seq2Seqmodel.py)
 
 ### Input Preprocessing
 
@@ -140,27 +140,45 @@ Preprocessing is  process that has to be done before we can feed data into our m
 - **padding and tokenization**
 
     Sentences are zero padded, so they will be same length, and tokenized into vectors of tokens (integers) with proper Tokenizer.
-    In this case build in tensorflow tokenizer is use, but one can use nltk tokenizer, scipy tokenizer etc..
-    We have to save both input and output language tokenizers to de-tokenize sentences later in prediction phase.
+    In this caseSubwordText tokenizer is use, but one can use nltk tokenizer, scipy tokenizer etc..
+    We have to save both input and output language tokenizers to de-tokenize sentences later in prediction phase. Also if there is no saved tokenizer files (.subword extension) we save it for future use.
 
     ```python
-    def preprocessSeq(texts, tokenizer):
-        texts = tokenizer.texts_to_sequences(texts)
+    def get_tokenizers(input_data):
+    """
+        Method that returns proper tokenizers for given input data
+        If there is proper tokenizer file, given as dictionary key,
+        this method will load tokenizer from it. If not it will
+        create new tokenizer and save it to proper file in this directory
+        
+        Parameters:
+            input_data - input datas that are used to build tokenizers. 
+                         Should be given in form of dictionary:
+                         tokenizer_file_name : data
+        Returns:
+            tokenizers - vector of tokenizers
+    """
 
-        return pad_sequences(texts, padding='post')
+    # creating tokenizers
+    tokenizers = []
+    current_dir = os.path.dirname(os.path.abspath(__file__))
 
-    def tokenizeInput(input_data, tokenizer):
-        output_data = []
-        for data in input_data:
-            tokenizer.fit_on_texts(data)
+    for file_name, data in input_data.items():
+        file_name = current_dir + "/" + file_name
+        if pathlib.Path(file_name + ".subwords").exists():
+            print("loading tokenizer from file ", file_name + ".subwords")
+            tokenizer=tfds.features.text.SubwordTextEncoder.load_from_file(file_name)
+        else:
+            print("creating new tokenizer")
+            tokenizer = tfds.features.text.SubwordTextEncoder.build_from_corpus(
+                (text for text in data), target_vocab_size=2**13)
+            tokenizer.save_to_file(file_name)
+        tokenizers.append(tokenizer)
 
-        for data in input_data:
-            output_data.append(preprocessSeq(data, tokenizer))
-
-        return output_data
+    return tokenizers
     ```
 
-    subroutines can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/utilities/utils.py)
+    subroutines for getting Tokenizer can be found here [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/preprocessing/tokenizer.py)
 
     whole preprocess routine can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/preprocessing/preprocessor.py) plus code is pasted below:
 
@@ -204,9 +222,7 @@ Preprocessing is  process that has to be done before we can feed data into our m
     input_train, intput_test, output_train, output_test = train_test_split(input_data, output_data, shuffle=True, test_size=0.1)
 
     intput_lines = intput_test
-    output_lines = output_test
-    
-    tokenizer_data = {input_tokenizer_name : input_train,
+    output_izer_data = {input_tokenizer_name : input_train,
                  output_tokenizer_name : output_train}
     input_tokenizer, output_tokenizer = get_tokenizers(tokenizer_data)
     print("Tokenizers created\n  {} vocab size {}\n  {} vocab size {}" \
@@ -253,8 +269,8 @@ In order to use multiple GPUs we have to create `MirroredStrategy` and then do w
 As for first, we have to multiply desired **BATCH_SIZE** we want to pass to single model, with number of GPUs we want to use. We can do this by simple `BATCH_SIZE * GUP_number` multiplication to use fixed number of GPUs, or use `strategy.num_replicas_in_sync` that will give us all available GPUs.
 
 ```python
-print ('Number of devices: {}'.format(self.strategy.num_replicas_in_sync))
-GLOBAL_BATCH_SIZE = self.batch_size*self.strategy.num_replicas_in_sync
+    print ('Number of devices: {}'.format(self.strategy.num_replicas_in_sync))
+    GLOBAL_BATCH_SIZE = self.batch_size*self.strategy.num_replicas_in_sync
 ```
 
 Where:
@@ -262,30 +278,56 @@ Where:
 
 After this, during each training step **GLOBAL_BACH_SIZE** samples wil be taken from dataset and distributed among all models, so we each model will get **BATCH_SIZE** batch size of data.
 
-Now when we have out desired **GLOBAL_BATCH_SIZE** let's create train/test datasets. Because we`re using distributed training our desired batch_size will be **GLOBAL_BATCH_SIZE**.
+Now when we have out desired **GLOBAL_BATCH_SIZE** let's create train/test datasets. Because we`re using distributed training our desired batch_size will be **GLOBAL_BATCH_SIZE**. Whole routine is wrapped into python method, pasted below:
 
 ```python
-train_dataset = tf.data.Dataset.from_tensor_slices((en_train, fr_train_in, fr_train_out))
-train_dataset = train_dataset.shuffle(len(en_train), reshuffle_each_iteration=True)\
-                                .batch(GLOBAL_BATCH_SIZE, drop_remainder=True)
-train_dataset_distr = self.strategy.experimental_distribute_dataset(train_dataset)
+    def makeDatasets(train_data, test_data, batch_size, strategy=None):
+    """
+        Method that created distributed/not distributed train and test datasets that can be later feed
+        into model in training/testing loop
+        Parameters:
+            train_data - input data for training. Should be in form : en_train, fr_train_in, fr_train_out
+            test_data - input data for test step. Should be in form : en_test, fr_test_in, fr_test_out
+            batch_size - batch_size that should be used to create datasets
+            strategy - strategy that datasets should use to be distributed across GPUs. Default is None
+        
+        Returns:
+        train_dataset - training dataset
+        test_dataset - testing dataset
+    """
+    
+    print("creating dataset...")
+    en_train, fr_train_in, fr_train_out = train_data
+    en_test, fr_test_in, fr_test_out = test_data
+    
+    train_dataset = tf.data.Dataset.from_tensor_slices((en_train, fr_train_in, fr_train_out))
+    train_dataset = train_dataset.shuffle(len(en_train), reshuffle_each_iteration=True)\
+                                        .batch(batch_size, drop_remainder=True)
 
-test_dataset = tf.data.Dataset.from_tensor_slices((en_test, fr_test_in, fr_test_out))
-test_dataset = test_dataset.shuffle(len(en_test), reshuffle_each_iteration=True)\
-                                .batch(GLOBAL_BATCH_SIZE, drop_remainder=True)
-test_dataset_distr = self.strategy.experimental_distribute_dataset(test_dataset)
+    test_dataset = tf.data.Dataset.from_tensor_slices((en_test, fr_test_in, fr_test_out))
+    test_dataset = test_dataset.shuffle(len(en_test), reshuffle_each_iteration=True)\
+                                    .batch(batch_size, drop_remainder=True)
+    
+    if strategy is not None:
+        train_dataset = strategy.experimental_distribute_dataset(train_dataset)
+        test_dataset = strategy.experimental_distribute_dataset(test_dataset)
+    
+    return train_dataset, test_dataset
 ```
 
 Only different thing, from non-distributed datasets are  in last lines for both test/train datasets
+
+Whole routine can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/utilities/utils.py)
+
 
 From this point everything we'll do, will be done under the score of `tf.strategy.MirroredStrategy()`.
 
 1. **We have to create Encoder/Decoder/Optimizer under strategy scope:**
 
 ```python
-            self.optimizer = tf.keras.optimizers.Adam(clipnorm=5.0)
-            self.encoder = Encoder(en_vocab_size, self.embedding_size, self.lstm_size)
-            self.decoder = Decoder(fr_vocab_size, self.embedding_size, self.lstm_size)
+    self.optimizer = tf.keras.optimizers.Adam(clipnorm=5.0)
+    self.encoder = Encoder(self.lstm_size, self.embedding_size, en_vocab_size)
+    self.decoder = Decoder(self.lstm_size, self.embedding_size, fr_vocab_size)
 ```
 
 2. **Loss function**
@@ -386,32 +428,39 @@ Basically what`s going on here is following:
 - Predicted symbol is passed as new decoder input along with previously returned hidden states
 - This process is repeated until `<end>` token is predicted or max length is reached
 
+Whole prediction step is wrapped in python method pasted below
+
 ```python
-def predict(self, en_sentence, fr_sentence):
-  tokenized_en_sentence = self.en_tokenizer.texts_to_sequences([en_sentence])
-  initial_states = self.encoder.init_states(1)
-  _, state_h, state_c = self.encoder(tf.constant(tokenized_en_sentence), initial_states, training_mode=False)
+def translate(self, en_sentence):
+    """
+        Translates sentence
+        Parameters:
+            en_sentence - sentence that will be translated
+        Returns:
+            translated sentence
+    """
 
-  symbol = tf.constant([[self.fr_tokenizer.word_index['<start>']]])
-  sentence = []
+    tokenized_input_data = self.en_tokenizer.encode(en_sentence)      
+    tokenized_input_data = tf.expand_dims(tokenized_input_data, 0)
+    initial_states = self.encoder.init_states(1)
+    _, state_h, state_c = self.encoder(tf.constant(tokenized_input_data), initial_states, training_mode=False)
 
-  while True:
-      symbol, state_h, state_c = self.decoder(symbol, (state_h, state_c), training_mode=False)
-      # argmax to get max index 
-      symbol = tf.argmax(symbol, axis=-1)
-      word = self.fr_tokenizer.index_word[symbol.numpy()[0][0]]
+    symbol = [self.fr_tokenizer.vocab_size]
+    symbol = tf.expand_dims(symbol, 0)
+    end_tag = self.fr_tokenizer.vocab_size+1
+    output_seq = []
 
-      if word == '<end>' or len(sentence) >= len(fr_sentence):
-          break
+    while True:
+        symbol, state_h, state_c = self.decoder(tf.constant(symbol), (state_h, state_c), training_mode=False)
+        # argmax to get max index 
+        symbol = tf.argmax(symbol, axis=-1)
 
-      sentence.append(word)
-    
-  predicted_sentence = ' '.join(sentence)
-  print("--------------PREDICTION--------------")
-  print("  English   :  {}" .format(en_sentence))
-  print("  Predicted :  {}" .format(predicted_sentence))
-  print("  Correct   :  {}" .format(fr_sentence))
-  print("------------END PREDICTION------------")
+        if symbol.numpy()[0][0] == end_tag or len(output_seq) >= 40:
+            break
+
+        word = self.fr_tokenizer.decode(symbol.numpy()[0])
+        output_seq.append(word)
+    return "".join(output_seq)
 ```
 
 5. **Main loop**
@@ -449,7 +498,7 @@ for epoch in range(epochs):
 
 One more thing that's going on here is saving model/optimizer value each `N` iterations. It's done with `tf.train.Checkpoint`. For details please see [tensorflow site](https://www.tensorflow.org/guide/checkpoint)
 
-Whole training process code can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/Seq2Seq/Seq2SeqTrainer.py)
+Whole training process code can be found [here](https://github.com/mizzmir/NLP/blob/master/machine%20translation%20projects/trainers/Seq2SeqTrainer.py)
 
 7. **Results**
 
