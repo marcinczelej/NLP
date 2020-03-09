@@ -31,6 +31,7 @@ data_dir = "google-quest-challenge/"
 
 train_df = pd.read_csv(os.path.join(data_dir, "train.csv"))
 test_df = pd.read_csv(os.path.join(data_dir, "test.csv"))
+stack_df = pd.read_csv(os.path.join(data_dir, "stackexchange.csv"))
 submit_df = pd.read_csv(os.path.join(data_dir, "sample_submission.csv"))    
 
 train_X_df = train_df[['question_title', 'question_body', 'answer', 'category']]
@@ -71,17 +72,17 @@ q_title = train_X_df['question_title'].values
 q_body = train_X_df['question_body'].values
 answer = train_X_df['answer'].values
 
+stack_q_title = stack_df['question_title'].values
+stack_q_body = stack_df['question_body'].values
+stack_answer = stack_df['answer'].values
+
 targets = train_targets_df.to_numpy()
 
 dataPreprocessor.logger = False
 dataPreprocessor.tokenizer = tokenizer
 
-preprocessedInput = dataPreprocessor.preprocessBatch(q_body, q_title, answer, max_seq_lengths=(30,128,128, 290))
-
-train_ds = tf.data.Dataset.from_tensor_slices((preprocessedInput, targets)).shuffle(len(q_body)//4, reshuffle_each_iteration=True).batch(batch_size=batch_size, drop_remainder=True)
-print("Batches ", targets.shape[0]//batch_size)
-
-print_each = targets.shape[0]//batch_size//5
+preprocessedInput = dataPreprocessor.preprocessBatch(q_body, q_title, answer, max_seq_lengths=(26,260,210,500))
+preprocessedStack = dataPreprocessor.preprocessBatch(stack_q_body, stack_q_title, stack_answer, max_seq_lengths=(26,260,210,500))
 
 class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
   def __init__(self, warmup_steps, num_steps, base_lr):
@@ -125,7 +126,7 @@ def flat_gradients(grads_or_idx_slices: tf.Tensor) -> tf.Tensor:
 
 def spearman_metric(y_true, y_pred):
     corr = [
-        spearmanr(pred_col, target_col).correlation
+        np.nan_to_num(spearmanr(pred_col, target_col).correlation)
         for pred_col, target_col in zip(y_pred.T, y_true.T)
     ]
     return corr
@@ -165,7 +166,7 @@ for train_idx, test_idx in kf.split(preprocessedInput):
     model.backbone.bert.pooler._trainable=False
     trainable = model.trainable_variables
 
-    checkpoint_dir = './checkpoints/'+str(fold_nr)+"_fold"
+    checkpoint_dir = './checkpoints/best_best_uncased_fold_{}' .format(fold_nr)
     checkpoint = tf.train.Checkpoint(model=model, optimizer=optimizer)
 
     @tf.function
@@ -182,7 +183,7 @@ for train_idx, test_idx in kf.split(preprocessedInput):
 
         grads = tape.gradient(loss, trainable)
 
-        return loss, grads, y_pred
+        return loss, grads, tf.math.sigmoid(y_pred)
 
     @tf.function
     def test_step(inputs, y_true):
@@ -193,7 +194,7 @@ for train_idx, test_idx in kf.split(preprocessedInput):
                       training=False)
         loss = tf.reduce_sum(bce_loss(y_true, y_pred)*(1. / batch_size))
 
-        return loss, y_pred
+        return loss, tf.math.sigmoid(y_pred)
 
     last_loss = 999999
     first_batch = True
@@ -237,11 +238,43 @@ for train_idx, test_idx in kf.split(preprocessedInput):
 
         test_spearmans = spearman_metric(np.vstack(test_targets), np.vstack(test_preds))
         train_spearmans = spearman_metric(np.vstack(train_targets), np.vstack(train_preds))
+        
         if hvd.local_rank() == 0:
-            print("epoch {} train loss {} test loss {} test spearman {} train spearman {}" .format(epoch, np.mean(train_losses), np.mean(test_losses),  np.mean(test_spearmans), np.mean(train_spearmans)))
+            print("epoch {} train loss {} test loss {} test spearman {}%6 train spearman {}%6" \
+                  .format(epoch, np.mean(train_losses), np.mean(test_losses),  np.mean(test_spearmans), np.mean(train_spearmans)))
+            
         if np.mean(test_spearmans) < last_loss:
             if hvd.rank() == 0:
-                checkpoint.save(os.path.join(checkpoint_dir, "model_best"))
+                checkpoint.save(os.path.join(checkpoint_dir, "best_base_uncased_best_model"))
                 last_loss = np.mean(test_spearmans)
                 print("saving checkpoint... ")
+
+    """    
+        Pseudo labeling for given fold using stackexchange data
+        
+            1. restoring best checkpoint for given fold
+            2. predicting output values for stackexchange
+            3. saving predicted data into csv file 
+    """
+    checkpoint.restore(checkpoint_dir).assert_consumed()
+    pseudo_labeling_ds = tf.data.Dataset.from_tensor_slices((preprocessedStack)).batch(batch_size=batch_size, drop_remainder=True)
+    pseudo_predictions = []
+    for _, inputs in enumerate(pseudo_labeling_ds):
+        ids_mask, type_ids_mask, attention_mask = inputs[:, 0, :], inputs[:, 1, :], inputs[:, 2, :]
+        predicted = model(ids_mask, 
+                      attention_mask= attention_mask, 
+                      token_type_ids=type_ids_mask, 
+                      training=False)
+        
+        predicted = tf.math.sigmoid(predicted)
+
+        pseudo_predictions.extend(predicted.numpy())
+    
+    predicted_df = stack_df.copy()
+    for idx, col in enumerate(train_targets_df.columns):
+        predicted_df[col] = pseudo_predictions[:, idx]
+    
+    predicted_df.to_csv(
+        os.path.join('./dataframes/pseudo_labeled' "best_base_uncased_fold-{}.csv" .format(fold_nr)), index=False)
+    
     fold_nr += 1
