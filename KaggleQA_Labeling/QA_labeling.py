@@ -4,16 +4,14 @@ import numpy as np
 import pandas as pd
 import tensorflow as tf
 
-from transformers import BertTokenizer
-from model import BertForQALabeling
+from transformers import BertTokenizer, RobertaTokenizer
+from BertModel import BertForQALabeling
+from RoBERTaModel import *
+from Trainer import Trainer
 from preprocessing import dataPreprocessor
 from parameters import *
 
-from sklearn.model_selection import KFold
-
 import horovod.tensorflow as hvd
-
-from scipy.stats import spearmanr
 
 hvd.init()
 
@@ -66,7 +64,8 @@ train_targets_df = train_df[["question_asker_intent_understanding",
     "answer_type_reason_explanation",
     "answer_well_written"]]
 
-tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+#tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+tokenizer = RobertaTokenizer.from_pretrained('roberta-base')
 
 q_title = train_X_df['question_title'].values
 q_body = train_X_df['question_body'].values
@@ -80,201 +79,13 @@ targets = train_targets_df.to_numpy()
 
 dataPreprocessor.logger = False
 dataPreprocessor.tokenizer = tokenizer
+dataPreprocessor.model = "Roberta"
 
 preprocessedInput = dataPreprocessor.preprocessBatch(q_body, q_title, answer, max_seq_lengths=(26,260,210,500))
 preprocessedStack = dataPreprocessor.preprocessBatch(stack_q_body, stack_q_title, stack_answer, max_seq_lengths=(26,260,210,500))
 
-class CustomSchedule(tf.keras.optimizers.schedules.LearningRateSchedule):
-  def __init__(self, warmup_steps, num_steps, base_lr):
-    super(CustomSchedule, self).__init__()
-
-    self.warmup_steps = tf.cast(warmup_steps, tf.float32)
-    self.num_steps = tf.cast(num_steps, tf.float32)
-    self.lr = tf.cast(base_lr, tf.float32)
-
-  def __call__(self, step):
-    def warmupPhase() : return step/tf.math.maximum(1.0, self.warmup_steps)
-    def decayPhase() : return tf.math.maximum(0.0, (self.num_steps - step))/tf.math.maximum(1.0, self.num_steps - self.warmup_steps)
-
-    multiplier = tf.cond(tf.math.less(step, self.warmup_steps), warmupPhase, decayPhase)
-    
-    return self.lr * multiplier
-
-def accumulated_gradients(gradients,
-                          step_gradients,
-                          num_grad_accumulates) -> tf.Tensor:
-    if gradients is None:
-        gradients = [flat_gradients(g) / num_grad_accumulates for g in step_gradients]
-    else:
-        for i, g in enumerate(step_gradients):
-            gradients[i] += flat_gradients(g) / num_grad_accumulates
-    
-    return gradients
-
-# This is needed for tf.gather like operations.
-def flat_gradients(grads_or_idx_slices: tf.Tensor) -> tf.Tensor:
-    '''Convert gradients if it's tf.IndexedSlices.
-    When computing gradients for operation concerning `tf.gather`, the type of gradients 
-    '''
-    if type(grads_or_idx_slices) == tf.IndexedSlices:
-        return tf.scatter_nd(
-            tf.expand_dims(grads_or_idx_slices.indices, 1),
-            grads_or_idx_slices.values,
-            grads_or_idx_slices.dense_shape
-        )
-    return grads_or_idx_slices
-
-def spearman_metric(y_true, y_pred):
-    corr = [
-        np.nan_to_num(spearmanr(pred_col, target_col).correlation)
-        for pred_col, target_col in zip(y_pred.T, y_true.T)
-    ]
-    return corr
-
-kf = KFold(n_splits=5)
-fold_nr =0
-
-for train_idx, test_idx in kf.split(preprocessedInput):
-    print("                FOLD ", fold_nr)
-    
-    # train test indices
-    train_input = tf.gather(preprocessedInput, train_idx, axis=0)
-    train_target = tf.gather(targets, train_idx, axis=0)
-
-    test_input = tf.gather(preprocessedInput, test_idx, axis=0)
-    test_target = tf.gather(targets, test_idx, axis=0)
-
-    #train dataset
-    train_ds = tf.data.Dataset.from_tensor_slices((train_input, train_target)). \
-                             shuffle(len(train_input)//4, reshuffle_each_iteration=True). \
-                             batch(batch_size=batch_size, drop_remainder=True)
-
-    #test dataset
-    test_ds = tf.data.Dataset.from_tensor_slices((test_input, test_target)). \
-                             shuffle(len(test_input)//4, reshuffle_each_iteration=True). \
-                             batch(batch_size=batch_size, drop_remainder=True)
-
-    lr_scheduler = CustomSchedule(warmup_steps=warmup_steps*2, 
-                                  num_steps=targets.shape[0]//batch_size, 
-                                  base_lr=lr*hvd.size())
-
-    #optimizer = tfa.optimizers.AdamW(learning_rate=lr_scheduler, weight_decay=decay)
-    optimizer = tf.optimizers.Adam(learning_rate = lr)
-    bce_loss = tf.keras.losses.BinaryCrossentropy(from_logits=True)
-
-    model = BertForQALabeling.from_pretrained('bert-base-uncased', num_labels=num_labels, output_hidden_states=True)
-    model.backbone.bert.pooler._trainable=False
-    trainable = model.trainable_variables
-
-    checkpoint_dir = './checkpoints/best_best_uncased_fold_{}' .format(fold_nr)
-    checkpoint = tf.train.Checkpoint(model=model, optimizer=optimizer)
-
-    @tf.function
-    def train_step(inputs, y_true):
-        with tf.GradientTape() as tape:
-            ids_mask, type_ids_mask, attention_mask = inputs[:, 0, :], inputs[:, 1, :], inputs[:, 2, :]
-            y_pred = model(ids_mask, 
-                             attention_mask= attention_mask, 
-                             token_type_ids=type_ids_mask, 
-                             training=True)
-            loss = tf.reduce_sum(bce_loss(y_true, y_pred)*(1. / batch_size))
-
-        tape = hvd.DistributedGradientTape(tape)
-
-        grads = tape.gradient(loss, trainable)
-
-        return loss, grads, tf.math.sigmoid(y_pred)
-
-    @tf.function
-    def test_step(inputs, y_true):
-        ids_mask, type_ids_mask, attention_mask = inputs[:, 0, :], inputs[:, 1, :], inputs[:, 2, :]
-        y_pred = model(ids_mask, 
-                      attention_mask= attention_mask, 
-                      token_type_ids=type_ids_mask, 
-                      training=False)
-        loss = tf.reduce_sum(bce_loss(y_true, y_pred)*(1. / batch_size))
-
-        return loss, tf.math.sigmoid(y_pred)
-
-    last_loss = 999999
-    first_batch = True
-    
-    for epoch in range(epochs):
-        gradients = None
-        train_losses = []
-        test_losses = []
-        train_preds = []
-        test_preds = []
-        train_targets = []
-        test_targets = []
-        global_batch = 0
-        for batch_nr, (inputs, y_true) in enumerate(train_ds):
-            loss, current_gradient, y_pred = train_step(inputs, y_true)
-            train_losses.append(np.mean(loss))
-            train_preds.append(y_pred)
-            train_targets.append(y_true)
-            gradients = accumulated_gradients(gradients, current_gradient, gradient_accumulate_steps)
-
-            if (batch_nr +1)%gradient_accumulate_steps ==0:
-                #print("batch_nr {} gradient applying" .format(batch_nr))
-                optimizer.apply_gradients(zip(gradients, trainable))
-                global_batch +=1
-                gradients = None
-
-                if first_batch:
-                    print("first batch")
-                    hvd.broadcast_variables(trainable, root_rank=0)
-                    hvd.broadcast_variables(optimizer.variables(), root_rank=0)
-                    first_batch=False
-
-            if batch_nr % 300 == 0 and hvd.local_rank() == 0:
-                print('Step #%d\tLoss: %.6f' % (batch_nr, loss))
-
-        for _, (inputs, y_true) in enumerate(test_ds):
-            loss, y_pred = test_step(inputs, y_true)
-            test_losses.append(np.mean(loss))
-            test_preds.append(y_pred)
-            test_targets.append(y_true)
-
-        test_spearmans = spearman_metric(np.vstack(test_targets), np.vstack(test_preds))
-        train_spearmans = spearman_metric(np.vstack(train_targets), np.vstack(train_preds))
-        
-        if hvd.local_rank() == 0:
-            print("epoch {} train loss {} test loss {} test spearman {}%6 train spearman {}%6" \
-                  .format(epoch, np.mean(train_losses), np.mean(test_losses),  np.mean(test_spearmans), np.mean(train_spearmans)))
-            
-        if np.mean(test_spearmans) < last_loss:
-            if hvd.rank() == 0:
-                checkpoint.save(os.path.join(checkpoint_dir, "best_base_uncased_best_model"))
-                last_loss = np.mean(test_spearmans)
-                print("saving checkpoint... ")
-
-    """    
-        Pseudo labeling for given fold using stackexchange data
-        
-            1. restoring best checkpoint for given fold
-            2. predicting output values for stackexchange
-            3. saving predicted data into csv file 
-    """
-    checkpoint.restore(checkpoint_dir).assert_consumed()
-    pseudo_labeling_ds = tf.data.Dataset.from_tensor_slices((preprocessedStack)).batch(batch_size=batch_size, drop_remainder=True)
-    pseudo_predictions = []
-    for _, inputs in enumerate(pseudo_labeling_ds):
-        ids_mask, type_ids_mask, attention_mask = inputs[:, 0, :], inputs[:, 1, :], inputs[:, 2, :]
-        predicted = model(ids_mask, 
-                      attention_mask= attention_mask, 
-                      token_type_ids=type_ids_mask, 
-                      training=False)
-        
-        predicted = tf.math.sigmoid(predicted)
-
-        pseudo_predictions.extend(predicted.numpy())
-    
-    predicted_df = stack_df.copy()
-    for idx, col in enumerate(train_targets_df.columns):
-        predicted_df[col] = pseudo_predictions[:, idx]
-    
-    predicted_df.to_csv(
-        os.path.join('./dataframes/pseudo_labeled' "best_base_uncased_fold-{}.csv" .format(fold_nr)), index=False)
-    
-    fold_nr += 1
+Trainer.train(model=RoBERTaForQALabelingMultipleHeads.from_pretrained('roberta-base', num_labels=num_labels, output_hidden_states=True), 
+              tokenizer=tokenizer, 
+              preprocessedInput=preprocessedInput, 
+              targets=targets, 
+              preprocessedPseudo=preprocessedStack)

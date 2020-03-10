@@ -1,0 +1,1 @@
+horovodrun -np 4 --timeline-filename ./timeline.json python QA_labeling.py   <- horovod with timeline analysis
